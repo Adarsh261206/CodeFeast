@@ -67,9 +67,9 @@ function App() {
   return (
     <div className="min-h-screen bg-[#F1F5F9] text-slate-900">
       <Topbar />
-      <div className="mx-auto max-w-[1440px] flex">
+      <div className="flex">
         <Sidebar />
-        <main className="flex-1 min-w-0 p-6 md:p-8">
+        <main className="flex-1 min-w-0 p-6 md:p-8 bg-[#F1F5F9]">
           <div className="max-w-[1280px] mx-auto">
             <AnimatePresence mode="wait">
               <motion.div

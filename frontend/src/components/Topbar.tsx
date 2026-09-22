@@ -15,7 +15,7 @@ export default function Topbar() {
   const initial = user?.email?.[0]?.toUpperCase() || 'U'
   return (
     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/80 border-b border-slate-200">
-      <div className="mx-auto max-w-[1440px] flex items-center gap-4 px-6 h-14">
+      <div className="flex items-center gap-4 px-4 h-14">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-slate-900 grid place-items-center text-white font-bold text-xs tracking-wide">CF</div>
           <div

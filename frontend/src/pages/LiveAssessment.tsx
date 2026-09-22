@@ -846,9 +846,9 @@ function solution(input) {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
-      {/* Exam Top Bar - Odoo/Nike minimal, sticky, only workspace */}
+      {/* Exam Top Bar - minimal, sticky, edge-to-edge, only workspace */}
       <div className="sticky top-0 z-30 bg-white border-b border-slate-200">
-        <div className="max-w-[1440px] mx-auto px-4 md:px-6 h-14 flex items-center justify-between gap-4">
+        <div className="px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-slate-900 text-white grid place-items-center font-bold text-xs">CF</div>
             <div className="min-w-0">
@@ -871,7 +871,7 @@ function solution(input) {
         </div>
         {/* Compact security bar */}
         <div className="border-t border-slate-100 bg-slate-50/50">
-          <div className="max-w-[1440px] mx-auto px-4 md:px-6 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <div className="px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
             <span className="text-slate-500">Fullscreen <b className={fullscreenExits>=2 ? 'text-amber-600' : 'text-slate-900'}>{fullscreenExits}/3</b></span>
             <span className="hidden sm:inline w-px h-3 bg-slate-200" />
             <span className="text-slate-500">Tabs <b className={blurCount>=3 ? 'text-amber-600' : 'text-slate-900'}>{blurCount}/5</b></span>

@@ -14,8 +14,8 @@ export default function Sidebar() {
   const { user } = useAuth()
   const items = getItems(user?.role === 'admin')
   return (
-    <aside className="hidden md:block w-[240px] shrink-0 sticky top-14 h-[calc(100vh-56px)] bg-white border-r border-slate-200 p-3" aria-label="Main navigation">
-      <nav className="space-y-1" role="navigation" aria-label="Sidebar">
+    <aside className="hidden md:block w-[240px] shrink-0 sticky top-14 h-[calc(100vh-56px)] bg-white border-r border-slate-200 py-3 pr-3 pl-0" aria-label="Main navigation">
+      <nav className="space-y-1 px-4" role="navigation" aria-label="Sidebar">
         {items.map((item) => {
           const Icon = item.icon
           const active = location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(item.to))
