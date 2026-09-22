@@ -32,6 +32,7 @@ router.get('/', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
           passedProblems: 0,
           languages: new Set(),
           allResults: [],
+          submissions: [] as any[],
           security: {
             tabSwitches: 0,
             fullscreenExits: 0
@@ -63,6 +64,14 @@ router.get('/', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
       if (submission.results && Array.isArray(submission.results)) {
         report.allResults.push(...submission.results)
       }
+      // Preserve code per submission for admin review
+      report.submissions.push({
+        problemId: submission.problemId || null,
+        language: submission.language || 'n/a',
+        code: submission.code || '',
+        score: submission.score || 0,
+        createdAt: submission.createdAt
+      })
       
       // Keep earliest createdAt and latest lastUpdated
       if (submission.createdAt < report.createdAt) {
@@ -113,7 +122,7 @@ router.get('/', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
 router.post('/submit', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   // Deprecated direct submit — now admin only to prevent arbitrary score injection
   // Normal assessment submits go via /api/assessments/submit which re-executes code server-side
-  const { candidateEmail: bodyEmail, assessmentId, problemId, timeTakenSec, score, language, results } = req.body
+  const { candidateEmail: bodyEmail, assessmentId, problemId, timeTakenSec, score, language, results, code } = req.body
   const candidateEmail = bodyEmail ? String(bodyEmail).toLowerCase().trim().slice(0,254) : req.user?.email
   if (!candidateEmail) return res.status(401).json({ error: 'Unauthorized' })
   if (typeof score === 'number' && (score < 0 || score > 1)) return res.status(400).json({ error: 'Invalid score' })
@@ -124,6 +133,7 @@ router.post('/submit', requireAuth, requireAdmin, async (req: AuthRequest, res) 
     timeTakenSec: Number(timeTakenSec)||0, 
     score: Number(score)||0, 
     language: String(language||'n/a').slice(0,20), 
+    code: code ? String(code).slice(0, 30000) : '',
     results: Array.isArray(results)? results.slice(0,50):[], 
     createdAt: new Date() 
   }

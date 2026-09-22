@@ -228,15 +228,16 @@ router.post('/submit', requireAuth, async (req: AuthRequest, res) => {
 
     await getDb().collection('submissions').insertOne(submission)
     
-    // Also write a lightweight report entry consumed by the Reports page
+    // Also write a lightweight report entry consumed by the Reports page — include code for admin review
     try {
-      const reportDoc = {
+      const reportDoc: any = {
         candidateEmail: req.user?.email,
         assessmentId: assessmentId || null,
         problemId,
         timeTakenSec: typeof timeTakenSec === 'number' ? timeTakenSec : 0,
         score, // fraction
         language,
+        code: String(code).slice(0, 30000),
         results: finalResults,
         security: {
           tabSwitches: security?.tabSwitches ?? 0,

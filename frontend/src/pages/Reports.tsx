@@ -14,6 +14,7 @@ type Report = {
   passedProblems: number
   languages: string[]
   allResults: { testcase: string; passed: boolean; expected?: string; output?: string; error?: string }[]
+  submissions?: { problemId: string | null; language: string; code: string; score: number; createdAt?: string }[]
   createdAt: string
   lastUpdated: string
   security?: { tabSwitches?: number; fullscreenExits?: number }
@@ -38,17 +39,24 @@ export default function Reports() {
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id?: string; bulk?: boolean }>({ open: false })
   const [error, setError] = useState<string | null>(null)
   const [assessmentTitles, setAssessmentTitles] = useState<Record<string,string>>({})
+  const [problemTitles, setProblemTitles] = useState<Record<string,string>>({})
   const [totalReports, setTotalReports] = useState(0)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   useEffect(() => { loadReports(); loadMeta() }, [])
 
   const loadMeta = async () => {
     try {
-      const [aRes] = await Promise.allSettled([api.get('/assessments?limit=100')])
+      const [aRes, pRes] = await Promise.allSettled([api.get('/assessments?limit=100'), api.get('/problems?limit=100')])
       if (aRes.status==='fulfilled') {
         const map: Record<string,string> = {}
         for (const a of (aRes.value.data.assessments||[])) map[a._id]=a.title
         setAssessmentTitles(map)
+      }
+      if (pRes.status==='fulfilled') {
+        const pmap: Record<string,string> = {}
+        for (const p of (pRes.value.data.problems||[])) pmap[p._id]=p.title
+        setProblemTitles(pmap)
       }
     } catch {}
   }
@@ -69,6 +77,7 @@ export default function Reports() {
         passedProblems: Number(report.passedProblems) || 0,
         languages: Array.isArray(report.languages) ? report.languages : [],
         allResults: Array.isArray(report.allResults) ? report.allResults : [],
+        submissions: Array.isArray(report.submissions) ? report.submissions : [],
         createdAt: report.createdAt || new Date().toISOString(),
         lastUpdated: report.lastUpdated || new Date().toISOString(),
         security: report.security || { tabSwitches: 0, fullscreenExits: 0 },
@@ -350,6 +359,41 @@ export default function Reports() {
                     </div>
                   </div>
                 )}
+
+                {/* Submitted Code — per problem */}
+                <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/30">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-slate-900">Submitted Code</h4>
+                    <button
+                      onClick={() => setExpanded(prev => { const ns = new Set(prev); if (ns.has(report._id)) ns.delete(report._id); else ns.add(report._id); return ns })}
+                      className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg text-xs font-medium text-slate-700"
+                    >
+                      {expanded.has(report._id) ? 'Hide' : `View Code (${report.submissions?.length || report.totalProblems})`}
+                    </button>
+                  </div>
+                  {expanded.has(report._id) && (
+                    <div className="mt-4 space-y-4">
+                      {report.submissions && report.submissions.length > 0 ? (
+                        report.submissions.map((sub: any, idx: number) => (
+                          <div key={idx} className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                            <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                              <div className="text-xs font-medium text-slate-700 flex items-center gap-2">
+                                <span className="w-6 h-6 rounded bg-slate-900 text-white grid place-items-center text-xs">{idx+1}</span>
+                                <span>{problemTitles[sub.problemId] || sub.problemId || `Problem ${idx+1}`}</span>
+                                <span className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-xs">{sub.language}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-xs border ${sub.score >= 0.5 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>{Math.round((sub.score||0)*100)}%</span>
+                              </div>
+                              <button onClick={() => navigator.clipboard.writeText(sub.code || '')} className="text-xs px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg">Copy</button>
+                            </div>
+                            <pre className="p-4 bg-slate-900 text-slate-100 font-mono text-xs overflow-auto max-h-72 whitespace-pre-wrap break-all">{sub.code || '// No code captured (old submission)'}</pre>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-xs text-slate-500 py-4 text-center border border-dashed border-slate-200 rounded-lg">No code captured for this submission (created before code logging). New submissions will show code here.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )
           })}
