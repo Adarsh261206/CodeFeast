@@ -39,6 +39,7 @@ export default function LiveAssessment() {
   const [customInput, setCustomInput] = useState('')
   const [customOutput, setCustomOutput] = useState<string | null>(null)
   const [customError, setCustomError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'sample' | 'custom'>('sample')
   const [securityWarnings, setSecurityWarnings] = useState<string[]>([])
   const [fullscreenExits, setFullscreenExits] = useState(0)
   const [blurCount, setBlurCount] = useState(0)
@@ -942,21 +943,53 @@ function solution(input) {
               </div>
             </div>
           )}
-          {currentProblem && currentProblem.visible_testcases && currentProblem.visible_testcases.length >0 && (
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-              <h3 className="text-sm font-semibold text-slate-900">Sample Tests</h3>
-              <div className="mt-3 space-y-2">
-                {currentProblem.visible_testcases.slice(0,2).map((tc, i)=>(
-                  <div key={i} className="flex items-center gap-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                    <span className="text-slate-500">#{i+1}</span>
-                    <span className="truncate">in: {tc.input}</span>
-                    <span className="ml-auto text-slate-400">→</span>
-                    <span className="truncate">{tc.output}</span>
-                  </div>
-                ))}
-              </div>
+          {/* Sample Tests + Custom Input Tabs — below sample test as requested */}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+            <div className="flex border-b border-slate-200">
+              <button onClick={()=>setActiveTab('sample')} className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${activeTab==='sample' ? 'bg-white text-slate-900 border-b-2 border-slate-900 -mb-px' : 'bg-slate-50 text-slate-500 hover:text-slate-700'}`}>Sample Tests</button>
+              <button onClick={()=>setActiveTab('custom')} className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${activeTab==='custom' ? 'bg-white text-slate-900 border-b-2 border-slate-900 -mb-px' : 'bg-slate-50 text-slate-500 hover:text-slate-700'}`}>Custom Input</button>
             </div>
-          )}
+            <div className="p-5">
+              {activeTab === 'sample' ? (
+                <>
+                  {currentProblem && currentProblem.visible_testcases && currentProblem.visible_testcases.length >0 ? (
+                    <div className="space-y-2">
+                      {currentProblem.visible_testcases.slice(0,3).map((tc, i)=>(
+                        <div key={i} className="flex items-center gap-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                          <span className="text-slate-500">#{i+1}</span>
+                          <span className="truncate">in: {tc.input}</span>
+                          <span className="ml-auto text-slate-400">→</span>
+                          <span className="truncate">{tc.output}</span>
+                        </div>
+                      ))}
+                      {currentProblem.visible_testcases.length>3 && <div className="text-xs text-slate-400 text-center">+{currentProblem.visible_testcases.length-3} more hidden</div>}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-slate-500 py-6 text-center border border-dashed border-slate-200 rounded-lg">No sample tests for this problem</div>
+                  )}
+                </>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-slate-500">Run with your own <b className="text-slate-700">STDIN</b> — e.g. <code className="bg-slate-100 border rounded px-1">[[2,7,11,15], 9]</code></p>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-50 border border-slate-200 text-slate-600">{selectedLanguage}</span>
+                  </div>
+                  <textarea value={customInput} onChange={(e) => setCustomInput(e.target.value)} placeholder={getCustomPlaceholder()} className="w-full h-28 bg-white border border-slate-200 rounded-lg p-3 font-mono text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10" aria-label="Custom input" />
+                  <div className="flex gap-2 mt-3">
+                    <button onClick={onRunCustom} disabled={isExecuting || !customInput.trim()} className="px-4 py-2 bg-slate-900 hover:bg-black text-white rounded-lg text-sm font-medium disabled:opacity-40">Run with Input</button>
+                    <button onClick={() => { setCustomInput(''); setCustomOutput(null); setCustomError(null) }} className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm">Clear</button>
+                    {customOutput !== null && <button onClick={()=> navigator.clipboard.writeText(customOutput || '')} className="ml-auto px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm">Copy</button>}
+                  </div>
+                  <div className="mt-4">
+                    <div className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Output</div>
+                    <pre className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm font-mono whitespace-pre-wrap break-all min-h-[56px]">{customOutput ?? '—'}</pre>
+                    {customError && <div className="mt-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2 whitespace-pre-wrap break-all">Error: {customError}</div>}
+                    {customOutput && !customError && <div className="mt-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-2">✓ Executed — not judged</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Right: Editor + Results */}
@@ -982,54 +1015,32 @@ function solution(input) {
             </div>
           </div>
 
-          <div className="grid gap-4">
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-slate-900">Test Results</h3>
-              {executionResults.length === 0 ? (
-                <div className="text-sm text-slate-500 mt-3 py-8 text-center border border-dashed border-slate-200 rounded-lg">Run the code to see results.</div>
-              ) : (
-                <div className="space-y-2 mt-3">
-                  {executionResults.map((result, index) => (
-                    <div key={index} className={`p-3 rounded-xl border text-xs ${result.passed ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
-                      <div className="flex items-center gap-2">
-                        <span className={`w-6 h-6 rounded-full grid place-items-center text-xs font-bold ${result.passed ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>{result.passed ? '✓' : '✗'}</span>
-                        <span className="text-sm font-medium text-slate-900">Test Case {index + 1}</span>
-                        <span className="ml-auto font-mono text-slate-500 truncate">in: {String(result.testcase ?? result.input ?? '').slice(0,40)}</span>
-                      </div>
-                      <div className="mt-2 font-mono bg-white border border-slate-200 rounded-lg p-2 break-all">
-                        <span className="text-slate-500">Output:</span> <span className="text-slate-900">{String(result.output)}</span>
-                      </div>
-                      {!result.passed && (
-                        <div className="mt-1 font-mono bg-white border border-slate-200 rounded-lg p-2 break-all">
-                          <span className="text-slate-500">Expected:</span> <span className="text-slate-900">{String(result.expected)}</span>
-                        </div>
-                      )}
-                      {result.error && <div className="mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 break-all">⚠ {String(result.error).slice(0,200)}</div>}
+          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-slate-900">Test Results</h3>
+            {executionResults.length === 0 ? (
+              <div className="text-sm text-slate-500 mt-3 py-8 text-center border border-dashed border-slate-200 rounded-lg">Run the code to see results. Use Custom Input tab for your own cases.</div>
+            ) : (
+              <div className="space-y-2 mt-3">
+                {executionResults.map((result, index) => (
+                  <div key={index} className={`p-3 rounded-xl border text-xs ${result.passed ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-full grid place-items-center text-xs font-bold ${result.passed ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'}`}>{result.passed ? '✓' : '✗'}</span>
+                      <span className="text-sm font-medium text-slate-900">Test Case {index + 1}</span>
+                      <span className="ml-auto font-mono text-slate-500 truncate">in: {String(result.testcase ?? result.input ?? '').slice(0,40)}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-900">Custom Input</h3>
-                <span className="text-xs px-2 py-1 rounded-full bg-slate-50 border border-slate-200 text-slate-600">{selectedLanguage}</span>
+                    <div className="mt-2 font-mono bg-white border border-slate-200 rounded-lg p-2 break-all">
+                      <span className="text-slate-500">Output:</span> <span className="text-slate-900">{String(result.output)}</span>
+                    </div>
+                    {!result.passed && (
+                      <div className="mt-1 font-mono bg-white border border-slate-200 rounded-lg p-2 break-all">
+                        <span className="text-slate-500">Expected:</span> <span className="text-slate-900">{String(result.expected)}</span>
+                      </div>
+                    )}
+                    {result.error && <div className="mt-1 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2 break-all">⚠ {String(result.error).slice(0,200)}</div>}
+                  </div>
+                ))}
               </div>
-              <p className="text-xs text-slate-500 mt-2">STDIN will be your input. For <code>solution</code> use JSON like <code className="bg-slate-100 border rounded px-1">[[2,7,11,15], 9]</code></p>
-              <textarea value={customInput} onChange={(e) => setCustomInput(e.target.value)} placeholder={getCustomPlaceholder()} className="w-full h-28 bg-white border border-slate-200 rounded-lg p-3 mt-3 font-mono text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10" aria-label="Custom input" />
-              <div className="flex gap-2 mt-3">
-                <button onClick={onRunCustom} disabled={isExecuting || !customInput.trim()} className="px-4 py-2 bg-slate-900 hover:bg-black text-white rounded-lg text-sm font-medium disabled:opacity-40">Run with Input</button>
-                <button onClick={() => { setCustomInput(''); setCustomOutput(null); setCustomError(null) }} className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm">Clear</button>
-                {customOutput !== null && <button onClick={()=> navigator.clipboard.writeText(customOutput || '')} className="ml-auto px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm">Copy</button>}
-              </div>
-              <div className="mt-4">
-                <div className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Output</div>
-                <pre className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm font-mono whitespace-pre-wrap break-all min-h-[56px]">{customOutput ?? '—'}</pre>
-                {customError && <div className="mt-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2 whitespace-pre-wrap break-all">Error: {customError}</div>}
-                {customOutput && !customError && <div className="mt-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg p-2">✓ Executed — not judged</div>}
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
