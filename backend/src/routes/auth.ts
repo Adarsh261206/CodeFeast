@@ -4,9 +4,12 @@ import { z } from 'zod'
 import { getDb } from '../lib/db'
 import bcrypt from 'bcryptjs'
 import { OAuth2Client } from 'google-auth-library'
-import { authLimiter } from '../middleware/ratelimit'
+import { authLimiter, eventAuthLimiter } from '../middleware/ratelimit'
 
 const router = Router()
+const isEventMode = process.env.EVENT_MODE === 'true'
+// During events, use 300/15min instead of 100/15min — prevents "Too many auth attempts" for college NAT
+const activeAuthLimiter = isEventMode ? eventAuthLimiter : authLimiter
 
 // Google OAuth client (optional; set GOOGLE_CLIENT_ID to enable)
 const googleClientId = process.env.GOOGLE_CLIENT_ID
@@ -27,8 +30,6 @@ const signJwt = (payload: { email: string; role: string }) =>
 const emailSchema = z.string().email().max(254).transform(s=>s.toLowerCase().trim())
 const passwordSchema = z.string().min(8).max(128)
 
-router.use(authLimiter)
-
 // Helpers
 async function findUserByEmail(email: string) {
   return getDb().collection('users').findOne({ email })
@@ -41,8 +42,8 @@ async function createUser(email: string, passwordHash: string, role: 'admin'|'us
   return { _id: res.insertedId, ...userDoc }
 }
 
-// Register with email/password
-router.post('/register', async (req, res) => {
+// Register with email/password — limiter per-route so /me is never limited (event: 300/15min else 100/15min)
+router.post('/register', activeAuthLimiter, async (req, res) => {
   try {
     const parsed = z.object({ email: emailSchema, password: passwordSchema }).safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'Invalid email or password (min 8 chars)', details: parsed.error.flatten() })
@@ -73,7 +74,7 @@ router.post('/register', async (req, res) => {
   }
 })
 
-router.post('/login', async (req, res) => {
+router.post('/login', activeAuthLimiter, async (req, res) => {
   try {
     const parsed = z.object({ email: emailSchema, password: z.string().min(1).max(128) }).safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'Invalid credentials format', details: parsed.error.flatten() })
@@ -93,7 +94,7 @@ router.post('/login', async (req, res) => {
 })
 
 // Google sign-in using ID token (frontend obtains credential via Google Identity Services)
-router.post('/google', async (req, res) => {
+router.post('/google', activeAuthLimiter, async (req, res) => {
   try {
     const parsed = z.object({ idToken: z.string().min(10).max(5000) }).safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'Missing idToken' })
