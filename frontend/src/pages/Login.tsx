@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { api } from '@/api/client'
+import { useAuth } from '@/hooks/useAuth'
 import BackgroundCanvas from '@/components/BackgroundCanvas'
 
 export default function Login() {
@@ -10,6 +11,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [isRegister, setIsRegister] = useState(false)
   const navigate = useNavigate()
+  const { refresh } = useAuth() as any
 
   // Load Google Identity Services script and render button
   useEffect(() => {
@@ -67,7 +69,10 @@ export default function Login() {
       localStorage.setItem('cf_token', res.data.token)
       localStorage.setItem('cf_email', res.data.user.email)
       localStorage.setItem('cf_role', res.data.user.role)
-      navigate('/')
+      // Ensure AuthProvider picks up new token before navigating
+      try { await refresh() } catch {}
+      // Use hard redirect to ensure App re-evaluates auth
+      window.location.href = '/'
     } catch (e: any) {
       setError(e.response?.data?.error || 'Google sign-in failed')
     } finally {
@@ -98,9 +103,17 @@ export default function Login() {
             localStorage.setItem('cf_token', res.data.token)
             localStorage.setItem('cf_email', res.data.user.email)
             localStorage.setItem('cf_role', res.data.user.role)
-            navigate('/')
+            // Critical: refresh auth context before navigating to avoid redirect loop
+            try { await refresh() } catch {}
+            window.location.href = '/'
           } catch (e: any) {
-            setError(e.response?.data?.error || (isRegister ? 'Registration failed' : 'Login failed'))
+            const msg = e.response?.data?.error || e.response?.data?.details || (isRegister ? 'Registration failed' : 'Login failed')
+            // Handle rate limit specifically
+            if (String(msg).toLowerCase().includes('too many')) {
+              setError('Too many attempts — please wait a moment and try again')
+            } else {
+              setError(typeof msg === 'string' ? msg : (isRegister ? 'Registration failed' : 'Login failed'))
+            }
           } finally {
             setLoading(false)
           }
