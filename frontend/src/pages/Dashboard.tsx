@@ -155,7 +155,7 @@ export default function Dashboard() {
         <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-slate-900">Quick Actions</h2>
-            <span className="text-xs text-slate-400 hidden sm:inline">Odoo-style • 1 click</span>
+            <span className="text-xs text-slate-400 hidden sm:inline">1 click</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
             <button onClick={handleGenerateAIProblem} className="group text-left p-4 rounded-xl border border-slate-200 hover:border-slate-900 hover:shadow-sm bg-white transition-all">

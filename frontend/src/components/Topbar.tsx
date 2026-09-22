@@ -38,7 +38,7 @@ export default function Topbar() {
             <div className="hidden md:flex items-center gap-3">
               <div className="text-right leading-tight">
                 <div className="text-sm font-medium text-slate-900 truncate max-w-[180px]">{user.email}</div>
-                <div className="text-xs text-slate-500 capitalize">{user.role} • Odoo-style</div>
+                <div className="text-xs text-slate-500 capitalize">{user.role}</div>
               </div>
               <div className="w-8 h-8 rounded-full bg-slate-900 text-white grid place-items-center text-xs font-semibold">{initial}</div>
             </div>

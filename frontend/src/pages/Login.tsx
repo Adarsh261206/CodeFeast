@@ -87,7 +87,7 @@ export default function Login() {
             <div className="w-9 h-9 rounded-xl bg-slate-900 grid place-items-center text-white font-bold text-sm">CF</div>
             <div className="text-[22px] font-semibold tracking-tight text-slate-900">CodeFeast</div>
           </div>
-          <div className="mt-2 text-sm text-slate-500">Assess. Code. Succeed. — Odoo inspired</div>
+          <div className="mt-2 text-sm text-slate-500">Assess. Code. Succeed.</div>
         </div>
 
         <form
