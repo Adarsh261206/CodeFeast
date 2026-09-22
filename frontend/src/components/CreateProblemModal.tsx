@@ -1,0 +1,136 @@
+import { useState } from 'react'
+import { api } from '../api/client'
+
+type Props = {
+  onClose: () => void
+  onCreated: () => void
+}
+
+export default function CreateProblemModal({ onClose, onCreated }: Props) {
+  const [title, setTitle] = useState('')
+  const [statement, setStatement] = useState('')
+  const [constraints, setConstraints] = useState('')
+  const [examples, setExamples] = useState<{ input: string; output: string }[]>([{ input: '', output: '' }])
+  const [visible, setVisible] = useState<{ input: string; output: string }[]>([{ input: '', output: '' }])
+  const [hidden, setHidden] = useState<{ input: string; output: string }[]>([{ input: '', output: '' }, { input: '', output: '' }])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const addRow = (setter: Function) => setter((arr: any[]) => [...arr, { input: '', output: '' }])
+  const updateRow = (setter: Function, idx: number, field: 'input'|'output', value: string) => {
+    setter((arr: any[]) => arr.map((r, i) => i === idx ? { ...r, [field]: value } : r))
+  }
+  const removeRow = (setter: Function, idx: number) => setter((arr: any[]) => arr.filter((_, i) => i !== idx))
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (!title || !statement) { setError('Title and statement are required'); return }
+    if (visible.length < 1 || hidden.length < 1) { setError('Add at least 1 visible and 1 hidden testcase'); return }
+
+    setLoading(true)
+    try {
+      await api.post('/admin/problems', {
+        title,
+        statement,
+        constraints,
+        examples: examples.filter(e => e.input && e.output),
+        visible_testcases: visible.filter(v => v.input && v.output),
+        hidden_testcases: hidden.filter(h => h.input && h.output)
+      })
+      onCreated()
+    } catch (e: any) {
+      setError(e.response?.data?.error || 'Failed to create problem')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="glass-card w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between p-6 pb-4 border-b border-borderToken">
+          <h2 className="text-xl font-semibold">Create Problem</h2>
+          <button className="text-textSecondary hover:text-textPrimary" onClick={onClose}>✕</button>
+        </div>
+        <form id="create-problem-form" onSubmit={onSubmit} className="flex-1 overflow-y-auto p-6 pt-4 space-y-4">
+          <div>
+            <label className="block text-sm text-textSecondary mb-1">Title</label>
+            <input className="w-full bg-surface border border-borderToken rounded-md p-2 focus-ring" value={title} onChange={e=>setTitle(e.target.value)} required />
+          </div>
+          <div>
+            <label className="block text-sm text-textSecondary mb-1">Statement</label>
+            <textarea className="w-full bg-surface border border-borderToken rounded-md p-2 focus-ring" rows={6} value={statement} onChange={e=>setStatement(e.target.value)} required />
+          </div>
+          <div>
+            <label className="block text-sm text-textSecondary mb-1">Constraints</label>
+            <textarea className="w-full bg-surface border border-borderToken rounded-md p-2 focus-ring" rows={3} value={constraints} onChange={e=>setConstraints(e.target.value)} />
+          </div>
+
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold">Examples</h3>
+              <button type="button" className="px-2 py-1 text-xs bg-accentSecondary/20 hover:bg-accentSecondary/30 rounded" onClick={()=>addRow(setExamples)}>+ Add</button>
+            </div>
+            <div className="space-y-2">
+              {examples.map((ex, idx) => (
+                <div key={idx} className="grid md:grid-cols-2 gap-2">
+                  <input className="bg-surface border border-borderToken rounded p-2" placeholder="Input" value={ex.input} onChange={e=>updateRow(setExamples, idx, 'input', e.target.value)} />
+                  <div className="flex gap-2">
+                    <input className="flex-1 bg-surface border border-borderToken rounded p-2" placeholder="Output" value={ex.output} onChange={e=>updateRow(setExamples, idx, 'output', e.target.value)} />
+                    <button type="button" className="px-2 text-xs bg-rose-500/20 hover:bg-rose-500/30 rounded" onClick={()=>removeRow(setExamples, idx)}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold">Visible Testcases</h3>
+              <button type="button" className="px-2 py-1 text-xs bg-accentSecondary/20 hover:bg-accentSecondary/30 rounded" onClick={()=>addRow(setVisible)}>+ Add</button>
+            </div>
+            <div className="space-y-2">
+              {visible.map((tc, idx) => (
+                <div key={idx} className="grid md:grid-cols-2 gap-2">
+                  <textarea className="bg-surface border border-borderToken rounded p-2" placeholder="Input" value={tc.input} onChange={e=>updateRow(setVisible, idx, 'input', e.target.value)} />
+                  <div className="flex gap-2">
+                    <textarea className="flex-1 bg-surface border border-borderToken rounded p-2" placeholder="Output" value={tc.output} onChange={e=>updateRow(setVisible, idx, 'output', e.target.value)} />
+                    <button type="button" className="px-2 text-xs bg-rose-500/20 hover:bg-rose-500/30 rounded" onClick={()=>removeRow(setVisible, idx)}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold">Hidden Testcases</h3>
+              <button type="button" className="px-2 py-1 text-xs bg-accentSecondary/20 hover:bg-accentSecondary/30 rounded" onClick={()=>addRow(setHidden)}>+ Add</button>
+            </div>
+            <div className="space-y-2">
+              {hidden.map((tc, idx) => (
+                <div key={idx} className="grid md:grid-cols-2 gap-2">
+                  <textarea className="bg-surface border border-borderToken rounded p-2" placeholder="Input" value={tc.input} onChange={e=>updateRow(setHidden, idx, 'input', e.target.value)} />
+                  <div className="flex gap-2">
+                    <textarea className="flex-1 bg-surface border border-borderToken rounded p-2" placeholder="Output" value={tc.output} onChange={e=>updateRow(setHidden, idx, 'output', e.target.value)} />
+                    <button type="button" className="px-2 text-xs bg-rose-500/20 hover:bg-rose-500/30 rounded" onClick={()=>removeRow(setHidden, idx)}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {error && <div className="text-rose-400 text-sm">{error}</div>}
+
+        </form>
+        <div className="p-6 pt-4 border-t border-borderToken flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-3 py-2 rounded-md border border-borderToken">Cancel</button>
+          <button form="create-problem-form" type="submit" disabled={loading} className="px-3 py-2 rounded-md bg-accentPrimary/80 hover:bg-accentPrimary disabled:opacity-60">
+            {loading ? 'Creating…' : 'Create Problem'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}

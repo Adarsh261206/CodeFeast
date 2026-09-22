@@ -1,0 +1,35 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Builds / outputs
+frontend/dist/
+backend/dist/
+*.log
+
+# Env / secrets
+.env
+.env.production
+frontend/.env
+frontend/.env.production
+backend/.env
+backend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.cursor/
+.idea/
+
+
+
+# Build caches
+*.tsbuildinfo
+.firebase/
+vite.config.js

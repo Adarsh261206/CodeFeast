@@ -1,0 +1,16 @@
+{
+  "projects": {
+    "default": "codefeast-468911"
+  },
+  "targets": {
+    "codefeast-468911": {
+      "hosting": {
+        "default": [
+          "YOUR_SITE_ID",
+          "codefeast-468911-web"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
