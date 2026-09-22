@@ -40,6 +40,30 @@ function App() {
     return <Login />
   }
 
+  const isExam = location.pathname.startsWith('/live-assessment')
+
+  // Exam mode: fullscreen workspace only, no sidebar/topbar — Odoo/Nike exam style
+  if (isExam) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] text-slate-900">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            <Routes location={location}>
+              <Route path="/live-assessment" element={<Protected><LiveAssessment /></Protected>} />
+              <Route path="/live-assessment/:assessmentId" element={<Protected><LiveAssessment /></Protected>} />
+            </Routes>
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-[#F1F5F9] text-slate-900">
       <Topbar />
