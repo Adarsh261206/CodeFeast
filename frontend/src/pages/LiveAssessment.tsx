@@ -755,7 +755,6 @@ end`
 
       case 'go':
         return `// ${problemName}
-package main
 func solution(nums []int, target int) []int {
     // Your code here
     return []int{}
@@ -770,21 +769,23 @@ pub fn solution(nums: Vec<i32>, target: i32) -> Vec<i32> {
 
       case 'swift':
         return `// ${problemName}
-class Solution {
-    func solution(_ nums: [Int], _ target: Int) -> [Int] {
-        // Your code here
-        return []
-    }
+func solution(_ nums: [Int], _ target: Int) -> [Int] {
+    // Your code here
+    return []
 }`
 
       case 'kotlin':
         return `// ${problemName}
-class Solution {
-    fun solution(nums: IntArray, target: Int): IntArray {
-        // Your code here
-        return intArrayOf()
-    }
+fun solution(nums: IntArray, target: Int): IntArray {
+    // Your code here
+    return intArrayOf()
 }`
+
+      case 'html':
+        return `<!-- ${problemName} -- HTML is markup, not DSA logic -->
+<!-- For DSA, use JS/Python. For HTML preview, this code will be returned as output -->
+<div>Hello CodeFeast</div>
+<!-- This will be echoed as output for HTML language -->`
 
       default:
         return `// ${problemName}
@@ -1004,6 +1005,13 @@ function solution(input) {
                 <option value="java">Java</option>
                 <option value="cpp">C++</option>
                 <option value="csharp">C#</option>
+                <option value="go">Go</option>
+                <option value="ruby">Ruby</option>
+                <option value="php">PHP</option>
+                <option value="swift">Swift</option>
+                <option value="rust">Rust</option>
+                <option value="kotlin">Kotlin</option>
+                <option value="html">HTML</option>
               </select>
             </div>
             <div className="flex items-center gap-2 mb-4">

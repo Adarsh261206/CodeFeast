@@ -20,7 +20,8 @@ const monacoLangMap: Record<string,string> = {
   go: 'go',
   rust: 'rust',
   swift: 'swift',
-  kotlin: 'kotlin'
+  kotlin: 'kotlin',
+  html: 'html'
 }
 function toMonacoLang(lang: string): string {
   return monacoLangMap[lang.toLowerCase()] || 'javascript'
