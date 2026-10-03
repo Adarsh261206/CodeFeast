@@ -15,72 +15,6 @@ export default function Login() {
   const navigate = useNavigate()
   const { refresh } = useAuth() as any
 
-  // Load Google Identity Services script and render button
-  useEffect(() => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
-    if (!clientId) return
-    const existing = document.getElementById('google-identity-script') as HTMLScriptElement | null
-    if (existing) {
-      // already loaded — try to render button immediately
-      if ((window as any).google?.accounts?.id) {
-        const c = document.getElementById('google-btn-container')
-        if (c && c.childElementCount===0) {
-          ;(window as any).google.accounts.id.renderButton(c, { type: 'standard', theme: 'filled_black', text: 'signin_with', size: 'large', shape: 'pill', width: 320, logo_alignment: 'left' })
-        }
-      }
-      return
-    }
-    const script = document.createElement('script')
-    script.id = 'google-identity-script'
-    script.src = 'https://accounts.google.com/gsi/client'
-    script.async = true
-    script.defer = true
-    script.onload = () => {
-      // @ts-ignore
-      if (window.google?.accounts?.id) {
-        // @ts-ignore
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: (response: any) => handleGoogleCredential(response.credential)
-        })
-        const container = document.getElementById('google-btn-container')
-        if (container) {
-          // @ts-ignore
-          window.google.accounts.id.renderButton(container, {
-            type: 'standard',
-            theme: 'filled_black',
-            text: 'signin_with',
-            size: 'large',
-            shape: 'pill',
-            width: 320,
-            logo_alignment: 'left'
-          })
-        }
-      }
-    }
-    script.onerror = () => setError('Failed to load Google Sign-In')
-    document.body.appendChild(script)
-    return () => { /* keep script for next mount */ }
-  }, [])
-
-  const handleGoogleCredential = async (idToken: string) => {
-    try {
-      setError('')
-      setLoading(true)
-      const res = await api.post('/auth/google', { idToken })
-      localStorage.setItem('cf_token', res.data.token)
-      localStorage.setItem('cf_email', res.data.user.email)
-      localStorage.setItem('cf_role', res.data.user.role)
-      // Ensure AuthProvider picks up new token before navigating
-      try { await refresh() } catch {}
-      // Use hard redirect to ensure App re-evaluates auth
-      window.location.href = '/'
-    } catch (e: any) {
-      setError(e.response?.data?.error || 'Google sign-in failed')
-    } finally {
-      setLoading(false)
-    }
-  }
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 md:p-10">
       <div className="w-full max-w-[440px]">
@@ -176,11 +110,6 @@ export default function Login() {
             </span>
           )}
         </div>
-        <div className="relative py-3">
-          <div className="absolute inset-x-0 top-1/2 h-px bg-slate-200" />
-          <div className="relative w-fit mx-auto px-3 text-xs text-slate-500 bg-white">or</div>
-        </div>
-        <div id="google-btn-container" className="grid place-items-center" />
         </form>
       </div>
     </div>
