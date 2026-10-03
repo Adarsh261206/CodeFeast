@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://codefeast-backend-1053929062075.asia-south1.run.app/api/:path*" }
+  ]
+}
