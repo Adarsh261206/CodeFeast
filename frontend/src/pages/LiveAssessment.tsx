@@ -1008,10 +1008,6 @@ function solution(input) {
                 <option value="go">Go</option>
                 <option value="ruby">Ruby</option>
                 <option value="php">PHP</option>
-                <option value="swift">Swift</option>
-                <option value="rust">Rust</option>
-                <option value="kotlin">Kotlin</option>
-                <option value="html">HTML</option>
               </select>
             </div>
             <div className="flex items-center gap-2 mb-4">
