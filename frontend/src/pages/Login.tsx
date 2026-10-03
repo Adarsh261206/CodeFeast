@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 import { api } from '@/api/client'
 import { useAuth } from '@/hooks/useAuth'
 import BackgroundCanvas from '@/components/BackgroundCanvas'
@@ -10,6 +11,7 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [isRegister, setIsRegister] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
   const { refresh } = useAuth() as any
 
@@ -131,16 +133,27 @@ export default function Login() {
           autoComplete="email"
         />
         <label className="block text-sm font-medium text-slate-700">Password {isRegister && <span className="text-xs font-normal text-slate-500">(min 8 chars)</span>}</label>
-        <input
-          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus-ring placeholder:text-slate-400"
-          type="password"
-          required
-          minLength={isRegister ? 8 : undefined}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="••••••••"
-          autoComplete={isRegister ? 'new-password' : 'current-password'}
-        />
+        <div className="relative">
+          <input
+            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus-ring placeholder:text-slate-400 pr-11"
+            type={showPassword ? 'text' : 'password'}
+            required
+            minLength={isRegister ? 8 : undefined}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoComplete={isRegister ? 'new-password' : 'current-password'}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(s => !s)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            tabIndex={-1}
+          >
+            {showPassword ? <EyeOff className="w-4.5 h-4.5" size={18} /> : <Eye className="w-4.5 h-4.5" size={18} />}
+          </button>
+        </div>
         {error && (
           <div className="text-rose-400 text-sm text-center">{error}</div>
         )}
