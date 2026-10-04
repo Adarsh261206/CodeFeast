@@ -20,7 +20,8 @@
       "@/hooks/*": ["src/hooks/*"],
       "@/utils/*": ["src/utils/*"],
       "@/theme/*": ["src/theme/*"],
-      "@/api/*": ["src/api/*"]
+      "@/api/*": ["src/api/*"],
+      "@/lib/*": ["src/lib/*"]
     },
     "types": ["react", "react-dom", "vite/client"]
   },

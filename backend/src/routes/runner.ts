@@ -47,8 +47,10 @@ router.post('/execute', executionLimiter, async (req, res) => {
 
     const results = await Promise.all(
       testcases.map(async (tc) => {
+        const execStart = Date.now()
         try {
           const { output, error } = await executeLocal(language, code, tc.input)
+          const execMs = Date.now() - execStart
           // Normalize output for display
           let out = (output ?? '').toString().trim()
           let err = (error ?? '').toString().trim()
@@ -66,7 +68,8 @@ router.post('/execute', executionLimiter, async (req, res) => {
             expected: tc.output,
             output: out,
             passed,
-            error: err || null
+            error: err || null,
+            execMs
           }
         } catch (e: any) {
           return {
@@ -74,7 +77,8 @@ router.post('/execute', executionLimiter, async (req, res) => {
             expected: tc.output,
             output: 'Execution failed',
             passed: false,
-            error: e.message || 'Unknown error'
+            error: e.message || 'Unknown error',
+            execMs: Date.now() - execStart
           }
         }
       })

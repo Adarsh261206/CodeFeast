@@ -40,6 +40,7 @@ export default function LiveAssessment() {
   const [customOutput, setCustomOutput] = useState<string | null>(null)
   const [customError, setCustomError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'sample' | 'custom'>('sample')
+  const [suggestionsEnabled, setSuggestionsEnabled] = useState(true)
   const [securityWarnings, setSecurityWarnings] = useState<string[]>([])
   const [fullscreenExits, setFullscreenExits] = useState(0)
   const [blurCount, setBlurCount] = useState(0)
@@ -58,10 +59,39 @@ export default function LiveAssessment() {
   const recentWarningKeysRef = useRef<Set<string>>(new Set())
   const userGestureDetectedRef = useRef(false)
   const assessmentStartAtRef = useRef<number>(Date.now())
+  const problemStartAtRef = useRef<number>(Date.now())
+  const keystrokesRef = useRef(0)
+  const pasteEventsRef = useRef(0)
+  const activeTypingMsRef = useRef(0)
+  const attemptCountRef = useRef(0)
+  const lastExecMsRef = useRef<number[]>([])
 
   const getElapsedSeconds = () => {
     const elapsedMs = Date.now() - assessmentStartAtRef.current
     return Math.max(0, Math.floor(elapsedMs / 1000))
+  }
+
+  const getProblemElapsedSeconds = () => {
+    const elapsedMs = Date.now() - problemStartAtRef.current
+    return Math.max(0, Math.floor(elapsedMs / 1000))
+  }
+
+  const getKpm = () => {
+    const activeMinutes = activeTypingMsRef.current / 60000
+    if (activeMinutes <= 0) return 0
+    return Math.round(keystrokesRef.current / activeMinutes)
+  }
+
+  const handleEditorStats = (stats: { keystrokes: number; pasteEvents: number; activeTypingMs: number }) => {
+    keystrokesRef.current = stats.keystrokes
+    pasteEventsRef.current = stats.pasteEvents
+    activeTypingMsRef.current = stats.activeTypingMs
+  }
+
+  const resetProblemTiming = () => {
+    problemStartAtRef.current = Date.now()
+    attemptCountRef.current = 0
+    lastExecMsRef.current = []
   }
 
   // Kill-switch to block any further interaction once a violation is detected
@@ -398,6 +428,7 @@ export default function LiveAssessment() {
       setAssessment(assessmentData)
       setProblems(assessmentProblems)
       setTimeLeft(assessmentData.duration * 60)
+      resetProblemTiming()
       // init code for first problem with current language
       const firstTitle = assessmentProblems[0]?.title
       const tpl = generateCodeTemplate(selectedLanguage, firstTitle)
@@ -445,6 +476,8 @@ export default function LiveAssessment() {
     try {
       setIsExecuting(true)
       setExecutionResults([])
+      attemptCountRef.current++
+      const runStart = Date.now()
       const res = await api.post('/runner/execute', {
         code,
         language: selectedLanguage,
@@ -452,6 +485,9 @@ export default function LiveAssessment() {
       })
       
       const results = res.data.results || []
+      const totalExecMs = Date.now() - runStart
+      lastExecMsRef.current.push(totalExecMs)
+      if (lastExecMsRef.current.length > 20) lastExecMsRef.current = lastExecMsRef.current.slice(-20)
       setExecutionResults(results)
       
       const passed = results.filter((r: any) => r.passed).length
@@ -488,6 +524,7 @@ export default function LiveAssessment() {
     setCustomError(null)
     try {
       setIsExecuting(true)
+      attemptCountRef.current++
       const res = await api.post('/runner/execute', {
         code,
         language: selectedLanguage,
@@ -532,6 +569,15 @@ export default function LiveAssessment() {
         language: selectedLanguage,
         results: executionResults,
         timeTakenSec: getElapsedSeconds(),
+        problemTimeSec: getProblemElapsedSeconds(),
+        keystrokes: keystrokesRef.current,
+        pasteEvents: pasteEventsRef.current,
+        activeTypingSec: Math.round(activeTypingMsRef.current / 1000),
+        kpm: getKpm(),
+        attempts: attemptCountRef.current,
+        avgExecMs: lastExecMsRef.current.length > 0
+          ? Math.round(lastExecMsRef.current.reduce((a,b)=>a+b,0) / lastExecMsRef.current.length)
+          : 0,
         security: {
           tabSwitches: blurCountRef.current,
           fullscreenExits: fullscreenExitCountRef.current
@@ -568,6 +614,7 @@ export default function LiveAssessment() {
       setExecutionResults([])
       setCustomOutput(null); setCustomError(null)
       setIsSubmitted(false)
+      resetProblemTiming()
     }
   }
 
@@ -581,6 +628,7 @@ export default function LiveAssessment() {
       setExecutionResults([])
       setCustomOutput(null); setCustomError(null)
       setIsSubmitted(false)
+      resetProblemTiming()
     }
   }
 
@@ -998,24 +1046,34 @@ function solution(input) {
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
             <div className="flex items-center justify-between gap-3 mb-4">
               <h3 className="text-sm font-semibold text-slate-900">Your Solution</h3>
-              <select value={selectedLanguage} onChange={(e) => handleLanguageChange(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10">
-                <option value="javascript">JavaScript</option>
-                <option value="typescript">TypeScript</option>
-                <option value="python">Python</option>
-                <option value="java">Java</option>
-                <option value="cpp">C++</option>
-                <option value="csharp">C#</option>
-                <option value="go">Go</option>
-                <option value="ruby">Ruby</option>
-                <option value="php">PHP</option>
-              </select>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSuggestionsEnabled(s => !s)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${suggestionsEnabled ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}
+                  title="Toggle autocomplete / intellisense"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  {suggestionsEnabled ? 'Autocomplete On' : 'Autocomplete Off'}
+                </button>
+                <select value={selectedLanguage} onChange={(e) => handleLanguageChange(e.target.value)} className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10">
+                  <option value="javascript">JavaScript</option>
+                  <option value="typescript">TypeScript</option>
+                  <option value="python">Python</option>
+                  <option value="java">Java</option>
+                  <option value="cpp">C++</option>
+                  <option value="csharp">C#</option>
+                  <option value="go">Go</option>
+                  <option value="ruby">Ruby</option>
+                  <option value="php">PHP</option>
+                </select>
+              </div>
             </div>
             <div className="flex items-center gap-2 mb-4">
               <button onClick={onRun} disabled={isSubmitted || isExecuting} className="flex-1 px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-900 rounded-lg text-sm font-medium disabled:opacity-40"> {isExecuting ? 'Running...' : 'Run Code'}</button>
               <button onClick={onSubmit} disabled={isSubmitted} className="flex-1 px-4 py-2 bg-slate-900 hover:bg-black text-white rounded-lg text-sm font-medium disabled:opacity-40">{isSubmitted ? 'Submitted' : 'Submit Solution'}</button>
             </div>
             <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <Editor value={code} onChange={handleCodeChange} language={selectedLanguage} height="420px" />
+              <Editor value={code} onChange={handleCodeChange} language={selectedLanguage} height="420px" suggestionsEnabled={suggestionsEnabled} onStats={handleEditorStats} />
             </div>
           </div>
 

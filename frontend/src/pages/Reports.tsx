@@ -13,8 +13,8 @@ type Report = {
   totalProblems: number
   passedProblems: number
   languages: string[]
-  allResults: { testcase: string; passed: boolean; expected?: string; output?: string; error?: string }[]
-  submissions?: { problemId: string | null; language: string; code: string; score: number; createdAt?: string }[]
+  allResults: { testcase: string; passed: boolean; expected?: string; output?: string; error?: string; execMs?: number }[]
+  submissions?: { problemId: string | null; language: string; code: string; score: number; problemTimeSec?: number; keystrokes?: number; pasteEvents?: number; activeTypingSec?: number; kpm?: number; attempts?: number; avgExecMs?: number; createdAt?: string }[]
   createdAt: string
   lastUpdated: string
   security?: { tabSwitches?: number; fullscreenExits?: number }
@@ -321,6 +321,9 @@ export default function Reports() {
                   <span className="text-slate-600">Tabs <b className="text-slate-900">{report.security?.tabSwitches ?? 0}</b></span>
                   <span className="text-slate-600">Fullscreen <b className="text-slate-900">{report.security?.fullscreenExits ?? 0}</b></span>
                   <span className="hidden sm:inline w-px h-3 bg-slate-200" />
+                  <span className="text-slate-600">Avg KPM <b className="text-slate-900">{(() => { const subs = (report.submissions || []).filter((s: any) => (s.kpm || 0) > 0); return subs.length ? Math.round(subs.reduce((a: number, s: any) => a + (s.kpm || 0), 0) / subs.length) : 0 })()}</b></span>
+                  <span className="text-slate-600">Pastes <b className="text-slate-900">{(report.submissions || []).reduce((a,s)=>a+(s.pasteEvents||0),0)}</b></span>
+                  <span className="hidden sm:inline w-px h-3 bg-slate-200" />
                   <span className="text-slate-500">{report.allResults?.length || 0} test cases • {report.passRate ? (report.passRate*100).toFixed(0) : 0}% pass</span>
                   {report.allResults?.some(r=> r.error) && <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full text-xs">⚠ some errors</span>}
                 </div>
@@ -336,6 +339,7 @@ export default function Reports() {
                             <th className="px-3 py-2 font-semibold text-slate-600">Input</th>
                             <th className="px-3 py-2 font-semibold text-slate-600">Expected</th>
                             <th className="px-3 py-2 font-semibold text-slate-600">Output</th>
+                            <th className="px-3 py-2 font-semibold text-slate-600 w-16">Exec</th>
                             <th className="px-3 py-2 font-semibold text-slate-600 w-20">Status</th>
                           </tr>
                         </thead>
@@ -346,6 +350,7 @@ export default function Reports() {
                               <td className="px-3 py-2 font-mono text-slate-700 max-w-[220px] truncate" title={tc.testcase}>{tc.testcase}</td>
                               <td className="px-3 py-2 font-mono text-slate-600 max-w-[160px] truncate" title={tc.expected}>{tc.expected || '—'}</td>
                               <td className="px-3 py-2 font-mono text-slate-900 max-w-[160px] truncate" title={tc.output}>{tc.output || '—'}</td>
+                              <td className="px-3 py-2 font-mono text-slate-500">{tc.execMs ? `${tc.execMs}ms` : '—'}</td>
                               <td className="px-3 py-2">
                                 <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${tc.passed ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>
                                   {tc.passed ? '✓ Pass' : '✗ Fail'}
@@ -384,6 +389,16 @@ export default function Reports() {
                                 <span className={`px-2 py-0.5 rounded-full text-xs border ${sub.score >= 0.5 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>{Math.round((sub.score||0)*100)}%</span>
                               </div>
                               <button onClick={() => navigator.clipboard.writeText(sub.code || '')} className="text-xs px-2.5 py-1 bg-white border border-slate-200 hover:bg-slate-50 rounded-lg">Copy</button>
+                            </div>
+                            <div className="px-4 py-2 bg-slate-50/50 border-b border-slate-200 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600">
+                              {sub.kpm > 0 && <span><b className="text-slate-900">{sub.kpm}</b> KPM</span>}
+                              {sub.keystrokes > 0 && <span><b className="text-slate-900">{sub.keystrokes}</b> keys</span>}
+                              {sub.attempts > 0 && <span><b className="text-slate-900">{sub.attempts}</b> runs</span>}
+                              {sub.problemTimeSec > 0 && <span><b className="text-slate-900">{sub.problemTimeSec}s</b> time</span>}
+                              {sub.avgExecMs > 0 && <span><b className="text-slate-900">{sub.avgExecMs}ms</b> avg exec</span>}
+                              {sub.activeTypingSec > 0 && <span><b className="text-slate-900">{sub.activeTypingSec}s</b> typing</span>}
+                              {sub.pasteEvents > 0 && <span className="text-amber-700"><b>{sub.pasteEvents}</b> pastes</span>}
+                              {sub.pasteEvents === 0 && <span className="text-slate-400">0 pastes</span>}
                             </div>
                             <pre className="p-4 bg-slate-900 text-slate-100 font-mono text-xs overflow-auto max-h-72 whitespace-pre-wrap break-all">{sub.code || '// No code captured (old submission)'}</pre>
                           </div>

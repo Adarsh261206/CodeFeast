@@ -70,6 +70,13 @@ router.get('/', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
         language: submission.language || 'n/a',
         code: submission.code || '',
         score: submission.score || 0,
+        problemTimeSec: submission.problemTimeSec || 0,
+        keystrokes: submission.keystrokes || 0,
+        pasteEvents: submission.pasteEvents || 0,
+        activeTypingSec: submission.activeTypingSec || 0,
+        kpm: submission.kpm || 0,
+        attempts: submission.attempts || 0,
+        avgExecMs: submission.avgExecMs || 0,
         createdAt: submission.createdAt
       })
       

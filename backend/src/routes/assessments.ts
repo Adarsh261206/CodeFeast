@@ -153,10 +153,18 @@ router.post('/submit', requireAuth, async (req: AuthRequest, res) => {
       code: zod.string().min(1).max(30000),
       results: zod.array(zod.any()).max(50).optional(), // accepted but ignored
       timeTakenSec: zod.number().min(0).max(86400).optional(),
+      problemTimeSec: zod.number().min(0).max(86400).optional(),
+      keystrokes: zod.number().min(0).max(1000000).optional(),
+      pasteEvents: zod.number().min(0).max(100000).optional(),
+      activeTypingSec: zod.number().min(0).max(86400).optional(),
+      kpm: zod.number().min(0).max(10000).optional(),
+      attempts: zod.number().min(0).max(10000).optional(),
+      avgExecMs: zod.number().min(0).max(600000).optional(),
       security: zod.object({ tabSwitches: zod.number().optional(), fullscreenExits: zod.number().optional() }).optional()
     })
     const parsed = bodySchema.safeParse(req.body)
     if (!parsed.success) return res.status(400).json({ error: 'Invalid payload', details: parsed.error.flatten() })
+    const { problemTimeSec, keystrokes, pasteEvents, activeTypingSec, kpm, attempts, avgExecMs } = parsed.data
     let oid: any
     try { oid = new (await import('mongodb')).ObjectId(problemId) } catch { return res.status(400).json({ error: 'Invalid problemId' })}
     const problem = await getDb().collection('problems').findOne({ 
@@ -185,8 +193,10 @@ router.post('/submit', requireAuth, async (req: AuthRequest, res) => {
       finalResults = []
     } else {
       finalResults = await Promise.all(testcases.map(async (t: any) => {
+        const execStart = Date.now()
         try {
           const { output, error } = await executeLocal(language, code, t.input)
+          const execMs = Date.now() - execStart
           const out = (output ?? '').toString().trim()
           const err = (error ?? '').toString().trim()
           let actual = out
@@ -197,9 +207,9 @@ router.post('/submit', requireAuth, async (req: AuthRequest, res) => {
           }
           if (!actual) actual = 'No output'
           const passed = !err && outputsEqual(actual, t.output || '')
-          return { testcase: t.input, expected: t.output, output: actual, passed, error: err || null }
+          return { testcase: t.input, expected: t.output, output: actual, passed, error: err || null, execMs }
         } catch (e: any) {
-          return { testcase: t.input, expected: t.output, output: 'Execution failed', passed: false, error: e.message }
+          return { testcase: t.input, expected: t.output, output: 'Execution failed', passed: false, error: e.message, execMs: Date.now() - execStart }
         }
       }))
     }
@@ -223,6 +233,13 @@ router.post('/submit', requireAuth, async (req: AuthRequest, res) => {
       totalCount,
       submittedAt: new Date(),
       timeTakenSec: typeof timeTakenSec === 'number' ? timeTakenSec : undefined,
+      problemTimeSec: typeof problemTimeSec === 'number' ? problemTimeSec : undefined,
+      keystrokes: typeof keystrokes === 'number' ? keystrokes : undefined,
+      pasteEvents: typeof pasteEvents === 'number' ? pasteEvents : undefined,
+      activeTypingSec: typeof activeTypingSec === 'number' ? activeTypingSec : undefined,
+      kpm: typeof kpm === 'number' ? kpm : undefined,
+      attempts: typeof attempts === 'number' ? attempts : undefined,
+      avgExecMs: typeof avgExecMs === 'number' ? avgExecMs : undefined,
       security: security || undefined
     }
 
@@ -235,6 +252,13 @@ router.post('/submit', requireAuth, async (req: AuthRequest, res) => {
         assessmentId: assessmentId || null,
         problemId,
         timeTakenSec: typeof timeTakenSec === 'number' ? timeTakenSec : 0,
+        problemTimeSec: typeof problemTimeSec === 'number' ? problemTimeSec : 0,
+        keystrokes: typeof keystrokes === 'number' ? keystrokes : 0,
+        pasteEvents: typeof pasteEvents === 'number' ? pasteEvents : 0,
+        activeTypingSec: typeof activeTypingSec === 'number' ? activeTypingSec : 0,
+        kpm: typeof kpm === 'number' ? kpm : 0,
+        attempts: typeof attempts === 'number' ? attempts : 0,
+        avgExecMs: typeof avgExecMs === 'number' ? avgExecMs : 0,
         score, // fraction
         language,
         code: String(code).slice(0, 30000),
