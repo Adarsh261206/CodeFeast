@@ -56,6 +56,7 @@ router.post('/execute', executionLimiter, async (req, res) => {
           // Normalize output for display
           let out = (output ?? '').toString().trim()
           let err = (error ?? '').toString().trim()
+          const rawOut = out
           // If local runner reported compilation/runtime error, surface as output
           if (!out && err) {
             if (err.toLowerCase().includes('compilation') || err.toLowerCase().includes('syntax')) out = 'Compilation error'
@@ -64,7 +65,7 @@ router.post('/execute', executionLimiter, async (req, res) => {
           }
           if (!out) out = 'No output'
           const isCustom = !tc.output || String(tc.output).trim() === ''
-          const passed = isCustom ? !err : outputsEqual(out, tc.output || '')
+          const passed = isCustom ? !err : outputsEqual(rawOut, tc.output || '')
           return {
             testcase: tc.input,
             expected: tc.output,

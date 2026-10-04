@@ -201,6 +201,7 @@ router.post('/submit', requireAuth, async (req: AuthRequest, res) => {
           const execMs = Date.now() - execStart
           const out = (output ?? '').toString().trim()
           const err = (error ?? '').toString().trim()
+          const rawOut = out
           let actual = out
           if (!actual && err) {
             if (err.toLowerCase().includes('compilation')) actual = 'Compilation error'
@@ -208,7 +209,7 @@ router.post('/submit', requireAuth, async (req: AuthRequest, res) => {
             else actual = err.slice(0, 500) || 'Runtime error'
           }
           if (!actual) actual = 'No output'
-          const passed = !err && outputsEqual(actual, t.output || '')
+          const passed = !err && outputsEqual(rawOut, t.output || '')
           return { testcase: t.input, expected: t.output, output: actual, passed, error: err || null, execMs }
         } catch (e: any) {
           return { testcase: t.input, expected: t.output, output: 'Execution failed', passed: false, error: e.message, execMs: Date.now() - execStart }
