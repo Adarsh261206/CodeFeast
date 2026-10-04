@@ -48,6 +48,7 @@ export default function LiveAssessment() {
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [toast, setToast] = useState<{msg: string; type?: 'success'|'error'|'info'}|null>(null)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
+  const [showRefreshConfirm, setShowRefreshConfirm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -65,6 +66,9 @@ export default function LiveAssessment() {
   const activeTypingMsRef = useRef(0)
   const attemptCountRef = useRef(0)
   const lastExecMsRef = useRef<number[]>([])
+  const isSubmittedRef = useRef(false)
+  const programmaticReloadRef = useRef(false)
+  const submitPayloadRef = useRef<any>(null)
 
   const getElapsedSeconds = () => {
     const elapsedMs = Date.now() - assessmentStartAtRef.current
@@ -93,6 +97,39 @@ export default function LiveAssessment() {
     attemptCountRef.current = 0
     lastExecMsRef.current = []
   }
+
+  useEffect(() => { isSubmittedRef.current = isSubmitted }, [isSubmitted])
+
+  const buildSubmitPayload = () => {
+    const p = problems[currentProblemIndex]
+    if (!p) return null
+    return {
+      assessmentId,
+      problemId: p._id,
+      code,
+      language: selectedLanguage,
+      results: executionResults,
+      timeTakenSec: getElapsedSeconds(),
+      problemTimeSec: getProblemElapsedSeconds(),
+      keystrokes: keystrokesRef.current,
+      pasteEvents: pasteEventsRef.current,
+      activeTypingSec: Math.round(activeTypingMsRef.current / 1000),
+      kpm: getKpm(),
+      attempts: attemptCountRef.current,
+      avgExecMs: lastExecMsRef.current.length > 0
+        ? Math.round(lastExecMsRef.current.reduce((a,b)=>a+b,0) / lastExecMsRef.current.length)
+        : 0,
+      security: {
+        tabSwitches: blurCountRef.current,
+        fullscreenExits: fullscreenExitCountRef.current
+      }
+    }
+  }
+
+  // Keep a fresh snapshot for beforeunload autosubmit (avoids stale closures)
+  useEffect(() => {
+    submitPayloadRef.current = buildSubmitPayload()
+  }, [code, problems, currentProblemIndex, selectedLanguage, executionResults])
 
   // Kill-switch to block any further interaction once a violation is detected
   const disableAllInteractions = () => {
@@ -326,6 +363,83 @@ export default function LiveAssessment() {
     }
   }, [])
 
+  // Refresh guard: intercept F5 / Ctrl+R / Cmd+R → confirm → auto-submit → reload
+  useEffect(() => {
+    const isRefreshKey = (e: KeyboardEvent) =>
+      e.key === 'F5' ||
+      ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === 'r' || e.key === 'R'))
+    const handleRefreshKey = (e: KeyboardEvent) => {
+      if (!isRefreshKey(e)) return
+      if (securityViolationRef.current) {
+        // Page locked after violation — block refresh so counters/overlay stay
+        e.preventDefault()
+        e.stopPropagation()
+        return
+      }
+      if (isSubmittedRef.current) return // attempt already saved, refresh is harmless
+      e.preventDefault()
+      e.stopPropagation()
+      setShowRefreshConfirm(true)
+    }
+    document.addEventListener('keydown', handleRefreshKey, true)
+    return () => document.removeEventListener('keydown', handleRefreshKey, true)
+  }, [])
+
+  // beforeunload: native confirm + keepalive auto-submit for toolbar refresh / back / tab close
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (programmaticReloadRef.current) return // our own reload after confirmed auto-submit
+      if (isSubmittedRef.current || securityViolationRef.current) return
+      const payload = submitPayloadRef.current
+      const hasWork = !!(payload && String(payload.code || '').trim())
+      e.preventDefault()
+      e.returnValue = 'Refresh'
+      // Fire-and-forget submit that survives page unload
+      if (hasWork) {
+        try {
+          const token = localStorage.getItem('cf_token')
+          fetch('/api/assessments/submit', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {})
+            },
+            body: JSON.stringify(payload),
+            keepalive: true
+          }).catch(() => {})
+        } catch {}
+      }
+      return ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [])
+
+  const refreshSubmittingRef = useRef(false)
+  const confirmRefresh = async () => {
+    setShowRefreshConfirm(false)
+    if (refreshSubmittingRef.current) return
+    const payload = submitPayloadRef.current
+    const hasWork = !!(payload && String(payload.code || '').trim())
+    if (isSubmittedRef.current || !hasWork) {
+      programmaticReloadRef.current = true
+      window.location.reload()
+      return
+    }
+    refreshSubmittingRef.current = true
+    setToast({ msg: 'Auto-submitting before refresh…', type: 'info' })
+    try {
+      await api.post('/assessments/submit', payload)
+      setIsSubmitted(true)
+      programmaticReloadRef.current = true
+      window.location.reload()
+    } catch (e: any) {
+      refreshSubmittingRef.current = false
+      const msg = e?.response?.data?.error || 'network error'
+      setToast({ msg: `Auto-submit failed — refresh cancelled (${String(msg).slice(0, 80)})`, type: 'error' })
+    }
+  }
+
   const handleSecurityViolation = async (reason: string) => {
     if (securityViolationRef.current) return
     
@@ -403,10 +517,12 @@ export default function LiveAssessment() {
         problemId: problems[currentProblemIndex]?._id
       });
       setToast({ msg: 'Assessment ended successfully', type: 'success' })
+      programmaticReloadRef.current = true
       setTimeout(() => window.location.replace('/'), 800)
     } catch (e) {
       console.error('Failed to end assessment:', e)
       setToast({ msg: 'Assessment ended (local termination)', type: 'info' })
+      programmaticReloadRef.current = true
       setTimeout(() => window.location.replace('/'), 800)
     }
   }
@@ -560,29 +676,11 @@ export default function LiveAssessment() {
 
   const onSubmit = async () => {
     if (!problems[currentProblemIndex] || isSubmitted) return
-    
+
     try {
-      const res = await api.post('/assessments/submit', {
-        assessmentId,
-        problemId: problems[currentProblemIndex]._id,
-        code,
-        language: selectedLanguage,
-        results: executionResults,
-        timeTakenSec: getElapsedSeconds(),
-        problemTimeSec: getProblemElapsedSeconds(),
-        keystrokes: keystrokesRef.current,
-        pasteEvents: pasteEventsRef.current,
-        activeTypingSec: Math.round(activeTypingMsRef.current / 1000),
-        kpm: getKpm(),
-        attempts: attemptCountRef.current,
-        avgExecMs: lastExecMsRef.current.length > 0
-          ? Math.round(lastExecMsRef.current.reduce((a,b)=>a+b,0) / lastExecMsRef.current.length)
-          : 0,
-        security: {
-          tabSwitches: blurCountRef.current,
-          fullscreenExits: fullscreenExitCountRef.current
-        }
-      })
+      const payload = buildSubmitPayload()
+      if (!payload) return
+      const res = await api.post('/assessments/submit', payload)
       
       setIsSubmitted(true)
       // If there is another problem, move to it instead of ending the test
@@ -682,151 +780,89 @@ function solution(nums, target) {
 }`
 
       case 'typescript':
-        if (shape === 'string') return `// ${problemName}
-function solution(s: string): string {
-  // Your code here
-  return "";
-}`
-        if (shape === 'number') return `// ${problemName}
-function solution(n: number): number {
-  // Your code here
-  return 0;
-}`
-        if (shape === 'array') return `// ${problemName}
-function solution(nums: number[]): number[] {
-  // Your code here
-  return [];
-}`
-        return `// ${problemName}
-function solution(nums: number[], target: number): number[] {
-  // Your code here
-  return [];
-}`
-
-      case 'python':
-        if (shape === 'string') return `# ${problemName}
-def solution(s):
-    # Your code here
-    return ""`
-        if (shape === 'number') return `# ${problemName}
-def solution(n):
-    # Your code here
-    return 0`
-        if (shape === 'array') return `# ${problemName}
-def solution(nums):
-    # Your code here
-    return []`
-        return `# ${problemName}
-def solution(nums, target):
-    # Your code here
-    return []`
-
-      case 'java':
-        if (shape === 'string') return `// ${problemName}
-import java.util.*; import java.io.*; import java.util.stream.Collectors;
-public class Main {
-    // Implement your logic here
-    public static String solution(String s) {
+        if (shape === 'string') return `// ${problemName} — LeetCode style
+class Solution {
+    solution(s: string): string {
         // Your code here
         return "";
     }
-    public static void main(String[] args) throws Exception {
-        BufferedReader br=new BufferedReader(new InputStreamReader(System.in));
-        String input=br.lines().collect(Collectors.joining()).trim();
-        if(input.isEmpty()) return;
-        if(input.length()>=2 && input.charAt(0)=='"' && input.charAt(input.length()-1)=='"')
-            input=input.substring(1, input.length()-1);
-        System.out.print(solution(input));
-    }
 }`
-        if (shape === 'number') return `// ${problemName}
-import java.util.*; import java.io.*; import java.util.stream.Collectors;
-public class Main {
-    // Implement your logic here
-    public static long solution(long n) {
+        if (shape === 'number') return `// ${problemName} — LeetCode style
+class Solution {
+    solution(n: number): number {
         // Your code here
         return 0;
     }
-    public static void main(String[] args) throws Exception {
-        BufferedReader br=new BufferedReader(new InputStreamReader(System.in));
-        String input=br.lines().collect(Collectors.joining()).trim();
-        if(input.isEmpty()) return;
-        long n=Long.parseLong(input.trim());
-        System.out.print(solution(n));
+}`
+        if (shape === 'array') return `// ${problemName} — LeetCode style
+class Solution {
+    solution(nums: number[]): number[] {
+        // Your code here
+        return [];
     }
 }`
-        if (shape === 'array') return `// ${problemName}
-import java.util.*; import java.io.*; import java.util.stream.Collectors;
-public class Main {
-    // Implement your logic here
-    public static long[] solution(long[] nums) {
+        return `// ${problemName} — LeetCode style
+class Solution {
+    solution(nums: number[], target: number): number[] {
+        // Your code here
+        return [];
+    }
+}`
+
+      case 'python':
+        if (shape === 'string') return `# ${problemName} — LeetCode style
+class Solution:
+    def solution(self, s):
+        # Your code here
+        return ""`
+        if (shape === 'number') return `# ${problemName} — LeetCode style
+class Solution:
+    def solution(self, n):
+        # Your code here
+        return 0`
+        if (shape === 'array') return `# ${problemName} — LeetCode style
+class Solution:
+    def solution(self, nums):
+        # Your code here
+        return []`
+        return `# ${problemName} — LeetCode style
+class Solution:
+    def solution(self, nums, target):
+        # Your code here
+        return []`
+
+      case 'java':
+        if (shape === 'string') return `// ${problemName} — LeetCode style
+class Solution {
+    public String solution(String s) {
+        // Your code here
+        return "";
+    }
+}`
+        if (shape === 'number') return `// ${problemName} — LeetCode style
+class Solution {
+    public long solution(long n) {
+        // Your code here
+        return 0;
+    }
+}`
+        if (shape === 'array') return `// ${problemName} — LeetCode style
+class Solution {
+    public long[] solution(long[] nums) {
         // Your code here
         return new long[]{};
     }
-    public static void main(String[] args) throws Exception {
-        BufferedReader br=new BufferedReader(new InputStreamReader(System.in));
-        String input=br.lines().collect(Collectors.joining()).trim();
-        if(input.isEmpty()) return;
-        String inner=input.substring(1, input.length()-1).trim();
-        String[] p = inner.isEmpty() ? new String[0] : inner.split(",");
-        long[] nums=new long[p.length];
-        for(int i=0;i<p.length;i++) nums[i]=Long.parseLong(p[i].trim());
-        long[] ans=solution(nums);
-        System.out.print(Arrays.toString(ans).replace(" ", ""));
-    }
 }`
-        return `// ${problemName} — read JSON [nums, target] from STDIN, print result as JSON
-import java.util.*; import java.io.*; import java.util.stream.Collectors;
-public class Main {
-    // Implement your logic here
-    public static int[] solution(int[] nums, int target) {
+        return `// ${problemName} — LeetCode style
+class Solution {
+    public int[] solution(int[] nums, int target) {
         // Your code here
-        Map<Integer,Integer> m=new HashMap<>();
-        for(int i=0;i<nums.length;i++){
-            int need=target-nums[i];
-            if(m.containsKey(need)) return new int[]{m.get(need), i};
-            m.put(nums[i], i);
-        }
         return new int[]{};
-    }
-    public static void main(String[] args) throws Exception {
-        BufferedReader br=new BufferedReader(new InputStreamReader(System.in));
-        String input=br.lines().collect(Collectors.joining()).trim();
-        if(input.isEmpty()) return;
-        // Parse JSON: [[2,7,11,15],9]
-        try{
-            // naive JSON parse for [nums, target]
-            String inner=input.substring(1, input.length()-1).trim(); // strip outer [ ]
-            // find split between nums array and target: last "],"
-            int split=inner.lastIndexOf("],");
-            String numsStr, targetStr;
-            if(split!=-1){
-                numsStr=inner.substring(0, split+1).trim();
-                targetStr=inner.substring(split+2).trim();
-            } else {
-                // fallback: split by comma
-                int comma=inner.lastIndexOf(",");
-                numsStr=inner.substring(0, comma).trim();
-                targetStr=inner.substring(comma+1).trim();
-            }
-            numsStr=numsStr.substring(1, numsStr.length()-1).trim(); // remove [ ]
-            int[] nums;
-            if(numsStr.isEmpty()) nums=new int[0];
-            else{
-                String[] p=numsStr.split(",");
-                nums=new int[p.length];
-                for(int i=0;i<p.length;i++) nums[i]=Integer.parseInt(p[i].trim());
-            }
-            int target=Integer.parseInt(targetStr);
-            int[] ans=solution(nums, target);
-            System.out.print(Arrays.toString(ans).replace(" ", "")); // JSON-like without spaces e.g. [0,1]
-        }catch(Exception e){ System.err.print(e.getMessage()); System.exit(1); }
     }
 }`
 
       case 'cpp':
-        if (shape === 'string') return `// ${problemName} — LeetCode style, read string from STDIN
-#include <iostream>
+        if (shape === 'string') return `// ${problemName} — LeetCode style
 #include <string>
 using namespace std;
 
@@ -836,213 +872,103 @@ public:
         // Your code here
         return "";
     }
-};
-
-int main(){
-    ios::sync_with_stdio(false); cin.tie(nullptr);
-    string s, line;
-    while(getline(cin, line)) s+=line;
-    if(s.size()>=2 && s.front()=='"' && s.back()=='"') s=s.substr(1, s.size()-2);
-    Solution sol;
-    cout<<sol.solution(s);
-    return 0;
-}`
-        if (shape === 'number') return `// ${problemName}
-#include <iostream>
-#include <string>
-#include <sstream>
-using namespace std;
-// Your logic here
-long long solution(long long n){
-    // Your code here
-    return 0;
-}
-int main(){
-    ios::sync_with_stdio(false); cin.tie(nullptr);
-    string all, line;
-    while(getline(cin, line)) all+=line;
-    stringstream ss(all); long long n; ss>>n;
-    cout<<solution(n);
-    return 0;
-}`
-        if (shape === 'array') return `// ${problemName}
-#include <iostream>
-#include <vector>
-#include <string>
-#include <sstream>
-using namespace std;
-// Your logic here
-vector<long long> solution(vector<long long>& nums){
-    // Your code here
-    return {};
-}
-int main(){
-    ios::sync_with_stdio(false); cin.tie(nullptr);
-    string all, line;
-    while(getline(cin, line)) all+=line;
-    auto trim=[](string s){ size_t a=s.find_first_not_of(" \\t\\n\\r"); if(a==string::npos) return string(""); size_t b=s.find_last_not_of(" \\t\\n\\r"); return s.substr(a,b-a+1); };
-    all=trim(all);
-    if(all.empty()) return 0;
-    string inner=all.substr(1, all.size()-2);
-    vector<long long> nums;
-    if(!inner.empty()){
-        stringstream ss(inner); string tok;
-        while(getline(ss, tok, ',')){ try{ nums.push_back(stoll(trim(tok))); }catch(...){} }
-    }
-    auto ans=solution(nums);
-    cout<<"[";
-    for(size_t i=0;i<ans.size();i++){ if(i) cout<<","; cout<<ans[i]; }
-    cout<<"]";
-    return 0;
-}`
-        return `// ${problemName} — read JSON [nums, target] from STDIN, print result
-#include <iostream>
-#include <vector>
-#include <unordered_map>
-#include <string>
-#include <sstream>
-#include <algorithm>
-using namespace std;
-// Your logic here
-vector<int> solution(vector<int>& nums, int target){
-    unordered_map<int,int> m;
-    for(int i=0;i<(int)nums.size();i++){
-        int need=target-nums[i];
-        if(m.count(need)) return {m[need], i};
-        m[nums[i]]=i;
-    }
-    return {};
-}
-int main(){
-    ios::sync_with_stdio(false); cin.tie(nullptr);
-    string all, line;
-    while(getline(cin, line)) all+=line;
-    auto trim=[](string s){ size_t a=s.find_first_not_of(" \\t\\n\\r"); if(a==string::npos) return string(""); size_t b=s.find_last_not_of(" \\t\\n\\r"); return s.substr(a,b-a+1); };
-    all=trim(all);
-    if(all.empty()) return 0;
-    try{
-        string inner=all.substr(1, all.size()-2);
-        size_t split=inner.rfind("],");
-        string numsStr, targetStr;
-        if(split!=string::npos){ numsStr=trim(inner.substr(0, split+1)); targetStr=trim(inner.substr(split+2)); }
-        else { size_t c=inner.rfind(","); numsStr=trim(inner.substr(0,c)); targetStr=trim(inner.substr(c+1)); }
-        numsStr=trim(numsStr.substr(1, numsStr.size()-2));
-        vector<int> nums;
-        if(!numsStr.empty()){
-            stringstream ss(numsStr); string tok;
-            while(getline(ss, tok, ',')) nums.push_back(stoi(trim(tok)));
-        }
-        int target=stoi(targetStr);
-        vector<int> ans=solution(nums, target);
-        cout<<"[";
-        for(size_t i=0;i<ans.size();i++){ if(i) cout<<","; cout<<ans[i]; }
-        cout<<"]";
-    }catch(exception &e){ cerr<<e.what(); return 1; }
-    return 0;
-}`
-
-      case 'csharp':
-        if (shape === 'string') return `// ${problemName}
-using System;
-class Program{
-    static string Solution(string s){
-        // Your code here
-        return "";
-    }
-    static void Main(){
-        string input=Console.In.ReadToEnd();
-        if(input.Length>=2 && input[0]=='"' && input[input.Length-1]=='"') input=input.Substring(1, input.Length-2);
-        Console.Write(Solution(input));
-    }
-}`
-        if (shape === 'number') return `// ${problemName}
-using System; using System.Linq;
-class Program{
-    static long Solution(long n){
+};`
+        if (shape === 'number') return `// ${problemName} — LeetCode style
+class Solution {
+public:
+    long long solution(long long n) {
         // Your code here
         return 0;
     }
-    static void Main(){
-        string input=Console.In.ReadToEnd().Trim();
-        if(string.IsNullOrEmpty(input)) return;
-        long n=long.Parse(input.Trim());
-        Console.Write(Solution(n));
+};`
+        if (shape === 'array') return `// ${problemName} — LeetCode style
+#include <vector>
+using namespace std;
+
+class Solution {
+public:
+    vector<long long> solution(vector<long long>& nums) {
+        // Your code here
+        return {};
+    }
+};`
+        return `// ${problemName} — LeetCode style
+#include <vector>
+using namespace std;
+
+class Solution {
+public:
+    vector<int> solution(vector<int>& nums, int target) {
+        // Your code here
+        return {};
+    }
+};`
+
+      case 'csharp':
+        if (shape === 'string') return `// ${problemName} — LeetCode style
+public class Solution {
+    public string solution(string s) {
+        // Your code here
+        return "";
     }
 }`
-        if (shape === 'array') return `// ${problemName}
-using System; using System.Linq;
-class Program{
-    static long[] Solution(long[] nums){
+        if (shape === 'number') return `// ${problemName} — LeetCode style
+public class Solution {
+    public long solution(long n) {
+        // Your code here
+        return 0;
+    }
+}`
+        if (shape === 'array') return `// ${problemName} — LeetCode style
+public class Solution {
+    public long[] solution(long[] nums) {
         // Your code here
         return new long[0];
     }
-    static void Main(){
-        string input=Console.In.ReadToEnd().Trim();
-        if(string.IsNullOrEmpty(input)) return;
-        string inner=input.Substring(1, input.Length-2).Trim();
-        long[] nums = inner.Length==0 ? new long[0] : inner.Split(',').Select(s=>long.Parse(s.Trim())).ToArray();
-        var ans=Solution(nums);
-        Console.Write("["+string.Join(",", ans)+"]");
-    }
 }`
-        return `// ${problemName} — read JSON [nums, target] from STDIN
-using System; using System.Linq; using System.Collections.Generic;
-class Program{
-    static int[] Solution(int[] nums, int target){
+        return `// ${problemName} — LeetCode style
+public class Solution {
+    public int[] solution(int[] nums, int target) {
         // Your code here
-        var m=new Dictionary<int,int>();
-        for(int i=0;i<nums.Length;i++){
-            int need=target-nums[i];
-            if(m.ContainsKey(need)) return new int[]{m[need], i};
-            m[nums[i]]=i;
-        }
-        return new int[]{};
-    }
-    static void Main(){
-        string input=Console.In.ReadToEnd().Trim();
-        if(string.IsNullOrEmpty(input)) return;
-        try{
-            string inner=input.Substring(1, input.Length-2).Trim();
-            int split=inner.LastIndexOf("],");
-            string numsStr, targetStr;
-            if(split!=-1){ numsStr=inner.Substring(0, split+1).Trim(); targetStr=inner.Substring(split+2).Trim(); }
-            else{ int c=inner.LastIndexOf(","); numsStr=inner.Substring(0,c).Trim(); targetStr=inner.Substring(c+1).Trim(); }
-            numsStr=numsStr.Substring(1, numsStr.Length-2).Trim();
-            int[] nums = numsStr.Length==0 ? new int[0] : numsStr.Split(',').Select(s=>int.Parse(s.Trim())).ToArray();
-            int target=int.Parse(targetStr);
-            var ans=Solution(nums, target);
-            Console.Write("["+string.Join(",", ans)+"]");
-        }catch(Exception e){ Console.Error.Write(e.Message); Environment.Exit(1); }
+        return new int[0];
     }
 }`
 
       case 'php':
         if (shape === 'string') return `<?php
-// ${problemName}
-function solution($s) {
-    // Your code here
-    return "";
+// ${problemName} — LeetCode style
+class Solution {
+    function solution($s) {
+        // Your code here
+        return "";
+    }
 }
 ?>`
         if (shape === 'number') return `<?php
-// ${problemName}
-function solution($n) {
-    // Your code here
-    return 0;
+// ${problemName} — LeetCode style
+class Solution {
+    function solution($n) {
+        // Your code here
+        return 0;
+    }
 }
 ?>`
         if (shape === 'array') return `<?php
-// ${problemName}
-function solution($nums) {
-    // Your code here
-    return [];
+// ${problemName} — LeetCode style
+class Solution {
+    function solution($nums) {
+        // Your code here
+        return [];
+    }
 }
 ?>`
         return `<?php
-// ${problemName}
-function solution($nums, $target) {
-    // Your code here
-    return [];
+// ${problemName} — LeetCode style
+class Solution {
+    function solution($nums, $target) {
+        // Your code here
+        return [];
+    }
 }
 ?>`
 
@@ -1069,28 +995,10 @@ def solution(nums, target)
 end`
 
       case 'go':
-        if (shape === 'string') return `// ${problemName}
-package main
-
-import (
-    "fmt"
-    "io"
-    "os"
-    "strings"
-)
-
+        if (shape === 'string') return `// ${problemName} — LeetCode style
 func solution(s string) string {
     // Your code here
     return ""
-}
-
-func main() {
-    data, _ := io.ReadAll(os.Stdin)
-    s := strings.TrimSpace(string(data))
-    if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
-        s = s[1 : len(s)-1]
-    }
-    fmt.Print(solution(s))
 }`
         if (shape === 'number') return `// ${problemName}
 func solution(n int64) int64 {
@@ -1416,6 +1324,17 @@ function solution(input) {
         cancelText="Cancel"
         onConfirm={confirmEndTest}
         onCancel={() => setShowEndConfirm(false)}
+      />
+
+      {/* Confirm Refresh → Auto-Submit */}
+      <ConfirmModal
+        open={showRefreshConfirm}
+        title="Refresh & Auto-Submit"
+        message="Refreshing will auto-submit your current code for this problem, then reload the page. Your fullscreen and tab-switch counters will restart. Do you want to continue?"
+        confirmText="Submit & Refresh"
+        cancelText="Cancel"
+        onConfirm={confirmRefresh}
+        onCancel={() => setShowRefreshConfirm(false)}
       />
       </div>
     </div>

@@ -38,55 +38,340 @@ export function normalizeInput(input: string): string {
   return JSON.stringify(s)
 }
 
-// Detect a LeetCode-style "class Solution { public: retType methodName(paramType param) }"
-// and return the parsed method so the runner can auto-generate a main() harness.
-function detectSolutionMethod(code: string): { retType: string; name: string; paramType: string; paramName: string } | null {
-  const classMatch = code.match(/class\s+Solution\s*\{[\s\S]*?public\s*:([\s\S]*?)\};/)
-  const body = classMatch ? classMatch[1] : code
-  const method = body.match(/\b([A-Za-z_][\w:<>, ]*?)\s+(\w+)\s*\(\s*([A-Za-z_&][\w:&<>]*?)\s+(\w+)\s*\)/)
-  if (!method) return null
-  return { retType: method[1].trim(), name: method[2], paramType: method[3].trim(), paramName: method[4] }
+// ---------- LeetCode-style auto-harness (detect class Solution method + generate main) ----------
+
+type SolParam = { type: string; name: string }
+type SolMethod = { retType: string; name: string; params: SolParam[] }
+
+function stripModifiers(t: string): string {
+  let s = t.trim()
+  for (;;) {
+    const c = s.match(/^(public|private|protected|static|final|abstract)\s*:\s*(.*)$/)
+    if (c) { s = c[2].trim(); continue }
+    const m = s.match(/^(public|private|protected|static|final|abstract)\s+(.*)$/)
+    if (m) { s = m[2].trim(); continue }
+    break
+  }
+  return s
 }
 
-// If user pasted LeetCode-style C++ code (class Solution, no main), wrap it with a
-// generated main() that reads input and calls the detected method.
+function splitTopLevel(raw: string): string[] {
+  const out: string[] = []
+  let depth = 0, cur = ''
+  for (const ch of raw) {
+    if ('<(['.includes(ch)) depth++
+    if ('>)]'.includes(ch)) depth--
+    if (ch === ',' && depth === 0) { if (cur.trim()) out.push(cur.trim()); cur = '' }
+    else cur += ch
+  }
+  if (cur.trim()) out.push(cur.trim())
+  return out
+}
+
+// Detect the user's entry method inside class Solution (C++/Java/C# styles).
+function detectSolutionMethod(code: string): SolMethod | null {
+  const bodies: string[] = []
+  const cpp = code.match(/class\s+Solution\s*\{[\s\S]*?public\s*:([\s\S]*?)\};/)
+  if (cpp) bodies.push(cpp[1])
+  const cls = code.match(/class\s+Solution[^{]*\{([\s\S]*)/)
+  if (cls) bodies.push(cls[1])
+  bodies.push(code)
+  for (const body of bodies) {
+    const re = /\b([A-Za-z_][\w:<>,\s\[\]]*?)\s+(\w+)\s*\(([^)]*)\)/g
+    let m: RegExpExecArray | null
+    while ((m = re.exec(body))) {
+      const retType = stripModifiers(m[1])
+      const name = m[2]
+      if (name === 'Solution') continue // constructor
+      const paramsRaw = m[3].trim()
+      if (!paramsRaw) continue
+      const parts = splitTopLevel(paramsRaw)
+      const params: SolParam[] = []
+      let ok = true
+      for (const p of parts) {
+        const pm = p.match(/^(.+?)\s+(\w+)$/)
+        if (!pm) { ok = false; break }
+        params.push({ type: pm[1].trim(), name: pm[2] })
+      }
+      if (!ok || params.length === 0 || params.length > 2) continue
+      if (!retType || /\breturn\b/.test(retType)) continue
+      return { retType, name, params }
+    }
+  }
+  return null
+}
+
+const isStringType = (t: string) => /string|String/.test(t)
+const isBoolType = (t: string) => /bool|boolean/.test(t)
+const isFloatType = (t: string) => /double|float/.test(t)
+const isNestedType = (t: string) => /vector\s*<\s*vector|vector\s*<\s*std\s*::\s*vector|List\s*<\s*List|int\s*\[\s*\]\s*\[\s*\]|<\s*.*\[\s*\]\s*>/.test(t)
+const isArrayType = (t: string) =>
+  /vector|List\s*<|int\s*\[|long\s*\[|double\s*\[|string\s*\[|\[\s*\]/.test(t) && !isStringType(t)
+const scalarCppType = (t: string) => {
+  if (/long\s+long/.test(t)) return 'long long'
+  if (/long/.test(t)) return 'long'
+  if (/short/.test(t)) return 'short'
+  if (/double/.test(t)) return 'double'
+  if (/float/.test(t)) return 'float'
+  if (/char/.test(t)) return 'char'
+  return 'int'
+}
+const cppParseCall = (t: string) => (/double|float/.test(t) ? 'stod' : 'stoll')
+
+// ---------- C++ ----------
 function wrapLeetCodeCpp(code: string): string {
   if (/\bint\s+main\s*\(/.test(code)) return code
   if (!code.includes('class Solution')) return code
-  const method = detectSolutionMethod(code)
-  if (!method) return code
-  const { name } = method
-  // LeetCode provides includes/namespace implicitly — add them if the paste lacks them.
+  const m = detectSolutionMethod(code)
+  if (!m) return code
+  const { name, params, retType } = m
+  if (isNestedType(params[0]?.type || '') || isNestedType(retType)) return code
+
   const prelude: string[] = []
   if (!code.includes('#include <iostream>')) prelude.push('#include <iostream>')
   if (!code.includes('#include <string>')) prelude.push('#include <string>')
+  if (!code.includes('#include <vector>')) prelude.push('#include <vector>')
+  if (!code.includes('#include <sstream>')) prelude.push('#include <sstream>')
   if (!/using\s+namespace\s+std\s*;/.test(code)) prelude.push('using namespace std;')
-  const head = prelude.length ? prelude.join('\n') + '\n' : ''
-  const isString = (t: string) => /string/.test(t)
-  if (isString(method.paramType)) {
-    // Single string param: read stdin, strip JSON quotes, call method, print result.
-    const main = `
-int main() {
-    std::string s, line;
-    while (std::getline(std::cin, line)) s += line;
-    if (s.size() >= 2 && s.front() == '"' && s.back() == '"') s = s.substr(1, s.size() - 2);
+  const head = prelude.join('\n') + '\n'
+
+  const printCode = () => {
+    if (isArrayType(retType)) {
+      return `cout<<"["; for(size_t __i=0;__i<__res.size();__i++){ if(__i) cout<<","; cout<<__res[__i]; } cout<<"]";`
+    }
+    if (isBoolType(retType)) return `cout<<(__res?"true":"false");`
+    return `cout<<__res;`
+  }
+
+  const prologue = `
+int main(){
+    ios::sync_with_stdio(false); cin.tie(nullptr);
+    string all, line;
+    while(getline(cin, line)) all+=line;
+    auto trim=[](string s){ size_t a=s.find_first_not_of(" \\t\\n\\r"); if(a==string::npos) return string(""); size_t b=s.find_last_not_of(" \\t\\n\\r"); return s.substr(a,b-a+1); };
+    all=trim(all);
+    if(all.empty()) return 0;
+`
+
+  // --- shape: string param ---
+  if (params.length === 1 && isStringType(params[0].type)) {
+    const p = params[0].name
+    const main = `${prologue}
+    if(all.size()>=2 && all.front()=='"' && all.back()=='"') all=all.substr(1, all.size()-2);
     Solution sol;
-    std::cout << sol.${name}(s);
+    string ${p}=all;
+    auto __res=sol.${name}(${p});
+    ${printCode()}
     return 0;
 }`
     return `${head}${code}\n${main}\n`
   }
-  // Fallback generic: try JSON-parse a single array/number arg and print as JSON/plain.
-  const main = `
-int main() {
-    std::string all, line;
-    while (std::getline(std::cin, line)) all += line;
+  // --- shape: array param ---
+  if (params.length === 1 && isArrayType(params[0].type)) {
+    const p = params[0].name
+    const scalar = scalarCppType(params[0].type)
+    const main = `${prologue}
+    if(all.front()!='[') return 0;
+    string inner=all.substr(1, all.size()-2);
+    vector<${scalar}> ${p};
+    if(!inner.empty()){ stringstream ss(inner); string tok; while(getline(ss, tok, ',')){ try{ ${p}.push_back((${scalar})${cppParseCall(params[0].type)}(trim(tok))); }catch(...){} } }
     Solution sol;
-    auto res = sol.${name}(all);
-    std::cout << res;
+    auto __res=sol.${name}(${p});
+    ${printCode()}
     return 0;
 }`
-  return `${head}${code}\n${main}\n`
+    return `${head}${code}\n${main}\n`
+  }
+  // --- shape: scalar param (number) ---
+  if (params.length === 1) {
+    const p = params[0].name
+    const t = params[0].type
+    const scalar = scalarCppType(t)
+    const main = `${prologue}
+    stringstream ss(all); ${scalar} ${p}; ss>>${p};
+    Solution sol;
+    auto __res=sol.${name}(${p});
+    ${printCode()}
+    return 0;
+}`
+    return `${head}${code}\n${main}\n`
+  }
+  // --- shape: 2 params (arrayLike, scalar) — twosum style ---
+  if (params.length === 2 && isArrayType(params[0].type) && !isArrayType(params[1].type) && !isStringType(params[1].type)) {
+    const [p0, p1] = [params[0].name, params[1].name]
+    const scalar0 = scalarCppType(params[0].type)
+    const scalar1 = scalarCppType(params[1].type)
+    const main = `${prologue}
+    if(all.front()!='[') return 0;
+    string inner=all.substr(1, all.size()-2);
+    size_t split=inner.rfind("],");
+    string numsStr, targetStr;
+    if(split!=string::npos){ numsStr=trim(inner.substr(0, split+1)); targetStr=trim(inner.substr(split+2)); }
+    else { size_t c=inner.rfind(","); numsStr=trim(inner.substr(0,c)); targetStr=trim(inner.substr(c+1)); }
+    if(numsStr.size()>=2) numsStr=numsStr.substr(1, numsStr.size()-2);
+    vector<${scalar0}> ${p0};
+    if(!numsStr.empty()){ stringstream ss(numsStr); string tok; while(getline(ss, tok, ',')){ try{ ${p0}.push_back((${scalar0})${cppParseCall(params[0].type)}(trim(tok))); }catch(...){} } }
+    ${scalar1} ${p1}; stringstream ss2(targetStr); ss2>>${p1};
+    Solution sol;
+    auto __res=sol.${name}(${p0}, ${p1});
+    ${printCode()}
+    return 0;
+}`
+    return `${head}${code}\n${main}\n`
+  }
+  return code
+}
+
+// ---------- Java ----------
+function wrapLeetCodeJava(code: string): string {
+  if (/\bvoid\s+main\s*\(/.test(code)) return code
+  if (!code.includes('class Solution')) return code
+  const cleaned = code.replace(/public\s+class\s+Solution/g, 'class Solution')
+  const m = detectSolutionMethod(cleaned)
+  if (!m) return code
+  const { name, params, retType } = m
+  if (isNestedType(params[0]?.type || '') || isNestedType(retType)) return code
+
+  const printCode = () => {
+    if (/\[\s*\]\s*\[\s*\]/.test(retType)) return `System.out.print(java.util.Arrays.deepToString(__res));`
+    if (/\[/.test(retType)) return `System.out.print(java.util.Arrays.toString(__res));`
+    return `System.out.print(__res);`
+  }
+
+  // Declare a variable `v` from source string expression `src`
+  const parseArrayInto = (src: string, v: string, t: string): string => {
+    if (/List\s*</.test(t)) {
+      const inner = (((t.match(/<\s*([^>]+)>/) || [,'Integer'])[1]) || 'Integer').trim()
+      const parseOne = /\blong\b/.test(inner) ? 'Long.parseLong(__t)' : /\bdouble\b/.test(inner) ? 'Double.parseDouble(__t)' : 'Integer.parseInt(__t)'
+      return `String __in_${v}=(${src}.length()>=2 && ${src}.charAt(0)=='[' && ${src}.charAt(${src}.length()-1)==']') ? ${src}.substring(1, ${src}.length()-1).trim() : ${src}.trim();
+        java.util.List<${inner}> ${v}=new java.util.ArrayList<>();
+        if(!__in_${v}.isEmpty()) for(String __t: __in_${v}.split(",")){ __t=__t.trim(); if(!__t.isEmpty()) ${v}.add(${parseOne}); }`
+    }
+    const prim = /\blong\b/.test(t) ? 'long' : /\bdouble\b/.test(t) ? 'double' : /\bfloat\b/.test(t) ? 'float' : 'int'
+    const parseOne = prim === 'long' ? 'Long::parseLong' : prim === 'double' ? 'Double::parseDouble' : prim === 'float' ? 'Float::parseFloat' : 'Integer::parseInt'
+    const mapTo = prim === 'long' ? 'mapToLong' : prim === 'double' ? 'mapToDouble' : prim === 'float' ? 'mapToFloat' : 'mapToInt'
+    return `String __in_${v}=(${src}.length()>=2 && ${src}.charAt(0)=='[' && ${src}.charAt(${src}.length()-1)==']') ? ${src}.substring(1, ${src}.length()-1).trim() : ${src}.trim();
+        ${prim}[] ${v} = __in_${v}.isEmpty() ? new ${prim}[0] : java.util.Arrays.stream(__in_${v}.split(",")).map(String::trim).filter(__s->!__s.isEmpty()).${mapTo}(${parseOne}).toArray();`
+  }
+
+  const parseScalarInto = (src: string, v: string, t: string): string => {
+    if (isStringType(t)) return `String ${v}=${src}; if(${v}.length()>=2 && ${v}.charAt(0)=='"' && ${v}.charAt(${v}.length()-1)=='"') ${v}=${v}.substring(1, ${v}.length()-1);`
+    if (/\blong\b/.test(t)) return `long ${v}=Long.parseLong(${src}.trim());`
+    if (/\bdouble\b/.test(t)) return `double ${v}=Double.parseDouble(${src}.trim());`
+    if (isBoolType(t)) return `boolean ${v}=Boolean.parseBoolean(${src}.trim());`
+    return `int ${v}=Integer.parseInt(${src}.trim());`
+  }
+
+  const head = `import java.util.*; import java.io.*; import java.util.stream.Collectors;\n`
+  const mainStart = `\npublic class Main {
+    public static void main(String[] args) throws Exception {
+        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
+        String input = br.lines().collect(Collectors.joining()).trim();
+        if (input.isEmpty()) return;
+`
+  const mainEnd = `    }
+}
+`
+  // --- shape: string param ---
+  if (params.length === 1 && isStringType(params[0].type)) {
+    return `${head}${cleaned}\n${mainStart}        ${parseScalarInto('input', params[0].name, params[0].type)}
+        var __res = new Solution().${name}(${params[0].name});
+        ${printCode()}\n${mainEnd}`
+  }
+  // --- shape: array param ---
+  if (params.length === 1 && isArrayType(params[0].type)) {
+    return `${head}${cleaned}\n${mainStart}        ${parseArrayInto('input', params[0].name, params[0].type)}
+        var __res = new Solution().${name}(${params[0].name});
+        ${printCode()}\n${mainEnd}`
+  }
+  // --- shape: scalar param ---
+  if (params.length === 1) {
+    return `${head}${cleaned}\n${mainStart}        ${parseScalarInto('input', params[0].name, params[0].type)}
+        var __res = new Solution().${name}(${params[0].name});
+        ${printCode()}\n${mainEnd}`
+  }
+  // --- shape: 2 params (arrayLike, scalar) — twosum style ---
+  if (params.length === 2 && isArrayType(params[0].type) && !isArrayType(params[1].type) && !isStringType(params[1].type)) {
+    return `${head}${cleaned}\n${mainStart}        int __c=input.indexOf(']');
+        if(__c<=1 || input.charAt(__c+1)!=',') return;
+        String in0=input.substring(1, __c+1);
+        String in1=input.substring(__c+2, input.length()-1).trim();
+        ${parseArrayInto('in0', params[0].name, params[0].type)}
+        ${parseScalarInto('in1', '__t1', params[1].type)}
+        var __res = new Solution().${name}(${params[0].name}, __t1);
+        ${printCode()}\n${mainEnd}`
+  }
+  return code
+}
+
+// ---------- C# ----------
+function wrapLeetCodeCsharp(code: string): string {
+  if (/\bvoid\s+Main\s*\(/.test(code) || /\bstatic\s+void\s+Main/.test(code)) return code
+  if (!code.includes('class Solution')) return code
+  const m = detectSolutionMethod(code)
+  if (!m) return code
+  const { name, params, retType } = m
+  if (isNestedType(params[0]?.type || '') || isNestedType(retType)) return code
+
+  const printCode = () => {
+    if (isBoolType(retType)) return `System.Console.Write(__res ? "true" : "false");`
+    if (/\[/.test(retType) || /List\s*</.test(retType)) return `System.Console.Write("["+string.Join(",", __res)+"]");`
+    return `System.Console.Write(__res);`
+  }
+
+  const parseArrayInto = (src: string, v: string, t: string): string => {
+    if (/List\s*</.test(t)) {
+      const inner = (((t.match(/<\s*([^>]+)>/) || [, 'int'])[1]) || 'int').trim()
+      return `var ${v} = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<${inner}>>(${src});`
+    }
+    if (/\blong\b/.test(t)) return `var ${v} = System.Text.Json.JsonSerializer.Deserialize<long[]>(${src});`
+    if (/\bdouble\b/.test(t)) return `var ${v} = System.Text.Json.JsonSerializer.Deserialize<double[]>(${src});`
+    if (/string\s*\[/.test(t)) return `var ${v} = System.Text.Json.JsonSerializer.Deserialize<string[]>(${src});`
+    return `var ${v} = System.Text.Json.JsonSerializer.Deserialize<int[]>(${src});`
+  }
+  const parseScalarInto = (src: string, v: string, t: string): string => {
+    if (isStringType(t)) return `var ${v}=${src}; if(${v}.Length>=2 && ${v}[0]=='"' && ${v}[${v}.Length-1]=='"') ${v}=${v}.Substring(1, ${v}.Length-2);`
+    if (/\blong\b/.test(t)) return `var ${v}=long.Parse(${src}.Trim());`
+    if (/\bdouble\b/.test(t)) return `var ${v}=double.Parse(${src}.Trim(), System.Globalization.CultureInfo.InvariantCulture);`
+    if (isBoolType(t)) return `var ${v}=bool.Parse(${src}.Trim());`
+    return `var ${v}=int.Parse(${src}.Trim());`
+  }
+
+  const head = `#nullable disable\nusing System; using System.Linq; using System.Collections.Generic;\n`
+  const mainStart = `\npublic class __CfEntry {
+  public static void Main() {
+    string __input = Console.In.ReadToEnd().Trim();
+    if (__input.Length == 0) return;
+`
+  const mainEnd = `  }
+}
+`
+  if (params.length === 1 && isStringType(params[0].type)) {
+    return `${head}${code}\n${mainStart}    ${parseScalarInto('__input', params[0].name, params[0].type)}
+    var __res = new Solution().${name}(${params[0].name});
+    ${printCode()}\n${mainEnd}`
+  }
+  if (params.length === 1 && isArrayType(params[0].type)) {
+    return `${head}${code}\n${mainStart}    ${parseArrayInto('__input', params[0].name, params[0].type)}
+    var __res = new Solution().${name}(${params[0].name});
+    ${printCode()}\n${mainEnd}`
+  }
+  if (params.length === 1) {
+    return `${head}${code}\n${mainStart}    ${parseScalarInto('__input', params[0].name, params[0].type)}
+    var __res = new Solution().${name}(${params[0].name});
+    ${printCode()}\n${mainEnd}`
+  }
+  if (params.length === 2 && isArrayType(params[0].type) && !isArrayType(params[1].type) && !isStringType(params[1].type)) {
+    return `${head}${code}\n${mainStart}    int __c=__input.IndexOf(']');
+    if(__c<=1 || __input[__c+1]!=',') return;
+    string __in=__input.Substring(1, __c);
+    string __target=__input.Substring(__c+2, __input.Length-__c-3).Trim();
+    ${parseArrayInto('__in', params[0].name, params[0].type)}
+    ${parseScalarInto('__target', '__t1', params[1].type)}
+    var __res = new Solution().${name}(${params[0].name}, __t1);
+    ${printCode()}\n${mainEnd}`
+  }
+  return code
 }
 
 // --- JS ---
@@ -112,9 +397,16 @@ export async function runJavascript(code: string, input: string): Promise<{ outp
   const wrapped = `
     ${code}
     if (typeof solution !== 'function') {
-      // LeetCode-style paste: pick the first user-defined function (e.g. var removeStars = function)
-      const fns = Object.keys(this).filter(k => typeof this[k] === 'function' && this[k].toString().indexOf('[native code]') === -1);
-      if (fns.length > 0) { this.solution = this[fns[fns.length - 1]]; }
+      // LeetCode-style paste: class Solution { method(...) } or var fn = function / function fn(...)
+      if (typeof Solution === 'function') {
+        const __inst = new Solution();
+        const __proto = Object.getPrototypeOf(__inst);
+        const __m = Object.getOwnPropertyNames(__proto).find(n => n !== 'constructor');
+        if (__m) { solution = (...args) => __inst[__m](...args); }
+      } else {
+        const fns = Object.keys(this).filter(k => typeof this[k] === 'function' && this[k].toString().indexOf('[native code]') === -1);
+        if (fns.length > 0) { solution = this[fns[fns.length - 1]]; }
+      }
     }
     if (typeof solution !== 'function') throw new Error('solution function not defined');
     if (Array.isArray(parsed) && parsed.length===2 && Array.isArray(parsed[0])) {
@@ -196,10 +488,13 @@ def _cf_run():
             else:
                 res = solution(parsed)
         elif 'Solution' in globals() and isinstance(Solution, type):
-            # LeetCode-style class Solution: call its first public method
+            # LeetCode-style class Solution: call its first own public method (source order)
             inst = Solution()
-            method = next(m for m in dir(inst) if not m.startswith('_') and callable(getattr(inst, m)))
-            res = getattr(inst, method)(parsed)
+            _name = next(k for k, v in vars(Solution).items() if not k.startswith('_') and callable(v))
+            if isinstance(parsed, list) and len(parsed)==2 and isinstance(parsed[0], list):
+                res = getattr(inst, _name)(parsed[0], parsed[1])
+            else:
+                res = getattr(inst, _name)(parsed)
         else:
             raise NameError('solution function not defined')
     except Exception as e:
@@ -240,12 +535,7 @@ export async function runJava(code: string, input: string): Promise<{ output: st
   const file = path.join(tmp, 'Main.java')
   let source = code
   if (!code.includes('class Main') && code.includes('class Solution')) {
-    // LeetCode-style paste: wrap class Solution with a Main that reads stdin.
-    const cleaned = code.replace(/public\s+class\s+Solution/g, 'class Solution')
-    const method = detectSolutionMethod(cleaned)
-    if (method && /string/i.test(method.paramType)) {
-      source = `import java.util.*; import java.io.*; import java.util.stream.Collectors;\n${cleaned}\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n        String input = br.lines().collect(Collectors.joining()).trim();\n        if (input.length() >= 2 && input.charAt(0) == '"' && input.charAt(input.length()-1) == '"') input = input.substring(1, input.length()-1);\n        System.out.print(new Solution().${method.name}(input));\n    }\n}\n`
-    }
+    source = wrapLeetCodeJava(code)
   }
   fs.writeFileSync(file, source)
   try {
@@ -303,94 +593,99 @@ export async function runCsharp(code: string, input: string): Promise<{ output: 
       return { output: 'Compilation error', error: (init.stderr || init.stdout).trim().slice(0,2000) }
     }
     const prog = path.join(tmp, 'app', 'Program.cs')
-    fs.writeFileSync(prog, code)
+    const source = code.includes('class Solution') ? wrapLeetCodeCsharp(code) : code
+    fs.writeFileSync(prog, source)
     const run = await spawnWithInput('dotnet', ['run', '--project', path.join(tmp, 'app')], input, 5000)
     if (run.timedOut) return { output: 'Time limit exceeded', error: 'Time limit exceeded' }
+    // dotnet run may leak MSBuild/nullable warnings into stdout — strip them.
+    const cleanOut = (s: string) => s.split('\n').filter(l => !/warning CS\d+/.test(l) && !/\[.*csproj\]\s*$/.test(l.trim()) && !/\.csproj\s*:/.test(l)).join('\n').trim()
     if (run.code !== 0) {
       // dotnet run returns 1 on compilation error, stderr contains build log
       const err = (run.stderr || run.stdout).trim()
       if (err.toLowerCase().includes('error')) return { output: 'Compilation error', error: err.slice(0,2000) }
       return { output: run.stdout.trim() || 'Runtime error', error: err.slice(0,2000) }
     }
-    return { output: run.stdout.trim(), error: null }
+    return { output: cleanOut(run.stdout), error: null }
   } finally {
     try { fs.rmSync(tmp, { recursive: true, force: true }) } catch {}
   }
 }
 
 // --- Go ---
+// Generate a Go main() harness for LeetCode-style bare functions (no main).
+function generateGoSource(code: string): string {
+  const stripped = code.replace(/\/\/[^\n]*/g, '')
+  const re = /\bfunc\s+(\w+)\s*\(([^)]*)\)\s*([^{]*)\{/g
+  let m: RegExpExecArray | null
+  let fn: { name: string; params: SolParam[]; ret: string } | null = null
+  while ((m = re.exec(stripped))) {
+    const name = m[1]
+    if (name === 'main' || name === 'init') continue
+    const ret = m[3].trim()
+    if (ret.includes('(')) break // multi-value return → unsupported
+    const parts = splitTopLevel(m[2].trim()).filter(Boolean)
+    const params: SolParam[] = []
+    let ok = true
+    for (const p of parts) {
+      const pm = p.match(/^(\w+)\s+(.+)$/) // Go order: name type
+      if (!pm) { ok = false; break }
+      params.push({ name: pm[1], type: pm[2].trim() })
+    }
+    if (!ok || params.length > 2) continue
+    fn = { name, params, ret }
+    break
+  }
+  if (!fn) return (code.includes('package main') ? '' : 'package main\n') + code
+
+  const needsRead = fn.params.length > 0
+  const imports: string[] = []
+  if (needsRead && !code.includes('"encoding/json"')) imports.push('  "encoding/json"')
+  if (fn.ret !== '' && !code.includes('"fmt"')) imports.push('  "fmt"')
+  if (needsRead && !code.includes('"io"')) imports.push('  "io"')
+  if (needsRead && !code.includes('"os"')) imports.push('  "os"')
+  const importStmt = imports.length ? `import (\n${imports.join('\n')}\n)\n` : ''
+
+  let decl = ''
+  const args: string[] = []
+  if (fn.params.length === 1) {
+    const p = fn.params[0]
+    decl += `  var ${p.name} ${p.type}\n  if err := json.Unmarshal(data, &${p.name}); err != nil { return }\n`
+    args.push(p.name)
+  } else if (fn.params.length === 2) {
+    const [p0, p1] = fn.params
+    decl += `  var __arr []json.RawMessage\n  if err := json.Unmarshal(data, &__arr); err != nil || len(__arr) < 2 { return }\n`
+    decl += `  var ${p0.name} ${p0.type}\n  if err := json.Unmarshal(__arr[0], &${p0.name}); err != nil { return }\n`
+    decl += `  var ${p1.name} ${p1.type}\n  if err := json.Unmarshal(__arr[1], &${p1.name}); err != nil { return }\n`
+    args.push(p0.name, p1.name)
+  }
+  const readLine = needsRead ? `  data, _ := io.ReadAll(os.Stdin)\n` : ''
+  let call = ''
+  if (fn.ret) {
+    call = `  __res := ${fn.name}(${args.join(', ')})\n`
+    if (/^\s*\[|^\s*map\[|interface\s*\{/.test(fn.ret)) {
+      call += `  __b, _ := json.Marshal(__res)\n  fmt.Print(string(__b))`
+    } else {
+      call += `  fmt.Print(__res)`
+    }
+  } else {
+    call = `  ${fn.name}(${args.join(', ')})`
+  }
+  const mainFn = `func main() {\n${readLine}${decl}${call}\n}\n`
+
+  if (!code.includes('package main')) {
+    return `package main\n${importStmt}${code}\n${mainFn}`
+  }
+  const body = code.replace(/(package\s+\w+[^\n]*\n)/, `$1${importStmt}`)
+  return `${body}\n${mainFn}`
+}
+
 export async function runGo(code: string, input: string): Promise<{ output: string; error: string | null }> {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cf-go-'))
   const file = path.join(tmp, 'main.go')
   if (code.includes('func main')) {
     fs.writeFileSync(file, code)
   } else {
-    let header = ''
-    if (!code.includes('package main')) header = 'package main\n'
-    const imports = `import (
-  "encoding/json"
-  "fmt"
-  "os"
-  "io"
-)
-`
-    let full = ''
-    if (code.includes('func solution(n int') || code.includes('func solution(n int)')) {
-      // Double: func solution(n int) int
-      full = `${header}${imports}${code}
-func main() {
-  data, _ := io.ReadAll(os.Stdin)
-  s := string(data)
-  if len(s)==0 { s="0" }
-  var parsed interface{}
-  json.Unmarshal([]byte(s), &parsed)
-  var n int
-  if f, ok := parsed.(float64); ok { n = int(f) }
-  else { var arr []int; json.Unmarshal([]byte(s), &arr); if(len(arr)>0) n=arr[0] }
-  res := solution(n)
-  fmt.Print(fmt.Sprintf("%d", res))
-}
-`
-    } else if (code.includes('func solution(nums []int)') && !code.includes('target int')) {
-      // Product
-      full = `${header}${imports}${code}
-func main() {
-  data, _ := io.ReadAll(os.Stdin)
-  s := string(data)
-  if len(s)==0 { s="[]" }
-  var nums []int
-  json.Unmarshal([]byte(s), &nums)
-  res := solution(nums)
-  b, _ := json.Marshal(res)
-  fmt.Print(string(b))
-}
-`
-    } else {
-      // TwoSum default
-      full = `${header}${imports}${code}
-func main() {
-  data, _ := io.ReadAll(os.Stdin)
-  s := string(data)
-  if len(s)==0 { s="[]" }
-  var parsed interface{}
-  json.Unmarshal([]byte(s), &parsed)
-  if arr, ok := parsed.([]interface{}); ok && len(arr)==2 {
-    if numsIf, ok2 := arr[0].([]interface{}); ok2 {
-      nums := make([]int, len(numsIf))
-      for i, v := range numsIf { nums[i]=int(v.(float64)) }
-      target := int(arr[1].(float64))
-      res := solution(nums, target)
-      b, _ := json.Marshal(res)
-      fmt.Print(string(b))
-      return
-    }
-  }
-  fmt.Fprintf(os.Stderr, "invalid input")
-  os.Exit(1)
-}
-`
-    }
-    fs.writeFileSync(file, full)
+    fs.writeFileSync(file, generateGoSource(code))
   }
   try {
     const run = await spawnWithInput('go', ['run', file], input, 3000)
@@ -419,7 +714,16 @@ rescue => e
   exit 1
 end
 begin
-  raise 'solution not defined' unless defined?(solution)
+  unless defined?(solution)
+    # LeetCode-style paste: top-level def becomes a private method on Object.
+    cands = Object.private_instance_methods(false)
+    want = (parsed.is_a?(Array) && parsed.length==2 && parsed[0].is_a?(Array)) ? 2 : 1
+    pick = cands.find { |m| Object.instance_method(m).arity == want }
+    pick ||= cands.find { |m| Object.instance_method(m).arity == 1 || Object.instance_method(m).arity == -1 }
+    pick ||= cands.first
+    raise 'solution not defined' unless pick
+    Object.send(:define_method, :solution) { |*args| send(pick, *args) }
+  end
   if parsed.is_a?(Array) && parsed.length==2 && parsed[0].is_a?(Array)
     res = solution(parsed[0], parsed[1])
   else
@@ -460,12 +764,42 @@ $data = file_get_contents('php://stdin');
 if (trim($data) === '') $data = '[]';
 $parsed = json_decode($data, true);
 if (json_last_error() !== JSON_ERROR_NONE) { fwrite(STDERR, json_last_error_msg()); exit(1); }
-if (!function_exists('solution')) { fwrite(STDERR, 'solution not defined'); exit(1); }
-if (is_array($parsed) && count($parsed)==2 && is_array($parsed[0])) {
-  $res = solution($parsed[0], $parsed[1]);
+// Resolve entry: solution() -> class Solution method -> first user-defined function
+$entry = null;
+if (function_exists('solution')) {
+  $entry = 'solution';
 } else {
-  $res = solution($parsed);
+  if (class_exists('Solution')) {
+    try {
+      $rc = new ReflectionClass('Solution');
+      foreach ($rc->getMethods(ReflectionMethod::IS_PUBLIC) as $m) {
+        if ($m->isConstructor() || $m->isStatic()) continue;
+        $inst = $rc->newInstance();
+        $mm = $m;
+        $entry = function(...$args) use ($inst, $mm) { return $mm->invokeArgs($inst, $args); };
+        break;
+      }
+    } catch (Throwable $e) {}
+  }
+  if ($entry === null) {
+    $fns = get_defined_functions()['user'];
+    $want = (is_array($parsed) && count($parsed)==2 && is_array($parsed[0])) ? 2 : 1;
+    $picked = null;
+    foreach ($fns as $f) {
+      try { if ((new ReflectionFunction($f))->getNumberOfParameters() == $want) { $picked = $f; break; } } catch (Throwable $e) {}
+    }
+    if ($picked === null && count($fns) > 0) $picked = $fns[0];
+    $entry = $picked;
+  }
 }
+if ($entry === null) { fwrite(STDERR, 'solution not defined'); exit(1); }
+try {
+  if (is_array($parsed) && count($parsed)==2 && is_array($parsed[0])) {
+    $res = $entry($parsed[0], $parsed[1]);
+  } else {
+    $res = $entry($parsed);
+  }
+} catch (Throwable $e) { fwrite(STDERR, $e->getMessage()); exit(1); }
 if ($res === null) echo '';
 else if (is_string($res) || is_int($res) || is_float($res) || is_bool($res)) echo strval($res);
 else echo json_encode($res);
