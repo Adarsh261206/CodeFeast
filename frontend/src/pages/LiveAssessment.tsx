@@ -431,7 +431,7 @@ export default function LiveAssessment() {
       resetProblemTiming()
       // init code for first problem with current language
       const firstTitle = assessmentProblems[0]?.title
-      const tpl = generateCodeTemplate(selectedLanguage, firstTitle)
+      const tpl = generateCodeTemplate(selectedLanguage, assessmentProblems[0])
       setCode(tpl)
       setCodeByLang({ [selectedLanguage]: tpl })
       setLoading(false)
@@ -446,7 +446,7 @@ export default function LiveAssessment() {
       const res = await api.get('/problems/sample')
       const prob = res.data.problem
       setProblems([prob])
-      const tpl = generateCodeTemplate(selectedLanguage, prob?.title)
+      const tpl = generateCodeTemplate(selectedLanguage, prob)
       setCode(tpl)
       setCodeByLang({ [selectedLanguage]: tpl })
       setLoading(false)
@@ -608,7 +608,7 @@ export default function LiveAssessment() {
     if (currentProblemIndex < problems.length - 1) {
       const nextIdx = currentProblemIndex + 1
       setCurrentProblemIndex(nextIdx)
-      const tpl = generateCodeTemplate(selectedLanguage, problems[nextIdx]?.title)
+      const tpl = generateCodeTemplate(selectedLanguage, problems[nextIdx])
       setCode(tpl)
       setCodeByLang({ [selectedLanguage]: tpl })
       setExecutionResults([])
@@ -622,7 +622,7 @@ export default function LiveAssessment() {
     if (currentProblemIndex > 0) {
       const prevIdx = currentProblemIndex - 1
       setCurrentProblemIndex(prevIdx)
-      const tpl = generateCodeTemplate(selectedLanguage, problems[prevIdx]?.title)
+      const tpl = generateCodeTemplate(selectedLanguage, problems[prevIdx])
       setCode(tpl)
       setCodeByLang({ [selectedLanguage]: tpl })
       setExecutionResults([])
@@ -632,11 +632,42 @@ export default function LiveAssessment() {
     }
   }
 
-  const generateCodeTemplate = (lang: string, problemTitle?: string) => {
-    const problemName = problemTitle || 'Two Sum'
-    
+  const detectProblemShape = (problem?: Problem): 'twosum' | 'array' | 'number' | 'generic' => {
+    const first = (problem?.visible_testcases?.[0]?.input || problem?.examples?.[0]?.input || '').trim()
+    if (!first) return 'generic'
+    try {
+      const p = JSON.parse(first)
+      if (Array.isArray(p)) {
+        if (p.length === 2 && Array.isArray(p[0])) return 'twosum'
+        return 'array'
+      }
+      if (typeof p === 'number') return 'number'
+      return 'generic'
+    } catch {
+      const m = first.match(/^(\[.*\]),\s*(.+)$/)
+      if (m) return 'twosum'
+      if (/^\[.*\]$/.test(first)) return 'array'
+      if (/^-?\d+$/.test(first)) return 'number'
+      return 'generic'
+    }
+  }
+
+  const generateCodeTemplate = (lang: string, problem?: Problem) => {
+    const problemName = problem?.title || 'Problem'
+    const shape = detectProblemShape(problem)
+
     switch (lang) {
       case 'javascript':
+        if (shape === 'number') return `// ${problemName}
+function solution(n) {
+  // Your code here
+  return 0;
+}`
+        if (shape === 'array') return `// ${problemName}
+function solution(nums) {
+  // Your code here
+  return [];
+}`
         return `// ${problemName}
 function solution(nums, target) {
   // Your code here
@@ -644,6 +675,16 @@ function solution(nums, target) {
 }`
 
       case 'typescript':
+        if (shape === 'number') return `// ${problemName}
+function solution(n: number): number {
+  // Your code here
+  return 0;
+}`
+        if (shape === 'array') return `// ${problemName}
+function solution(nums: number[]): number[] {
+  // Your code here
+  return [];
+}`
         return `// ${problemName}
 function solution(nums: number[], target: number): number[] {
   // Your code here
@@ -651,12 +692,56 @@ function solution(nums: number[], target: number): number[] {
 }`
 
       case 'python':
+        if (shape === 'number') return `# ${problemName}
+def solution(n):
+    # Your code here
+    return 0`
+        if (shape === 'array') return `# ${problemName}
+def solution(nums):
+    # Your code here
+    return []`
         return `# ${problemName}
 def solution(nums, target):
     # Your code here
     return []`
 
       case 'java':
+        if (shape === 'number') return `// ${problemName}
+import java.util.*; import java.io.*; import java.util.stream.Collectors;
+public class Main {
+    // Implement your logic here
+    public static long solution(long n) {
+        // Your code here
+        return 0;
+    }
+    public static void main(String[] args) throws Exception {
+        BufferedReader br=new BufferedReader(new InputStreamReader(System.in));
+        String input=br.lines().collect(Collectors.joining()).trim();
+        if(input.isEmpty()) return;
+        long n=Long.parseLong(input.trim());
+        System.out.print(solution(n));
+    }
+}`
+        if (shape === 'array') return `// ${problemName}
+import java.util.*; import java.io.*; import java.util.stream.Collectors;
+public class Main {
+    // Implement your logic here
+    public static long[] solution(long[] nums) {
+        // Your code here
+        return new long[]{};
+    }
+    public static void main(String[] args) throws Exception {
+        BufferedReader br=new BufferedReader(new InputStreamReader(System.in));
+        String input=br.lines().collect(Collectors.joining()).trim();
+        if(input.isEmpty()) return;
+        String inner=input.substring(1, input.length()-1).trim();
+        String[] p = inner.isEmpty() ? new String[0] : inner.split(",");
+        long[] nums=new long[p.length];
+        for(int i=0;i<p.length;i++) nums[i]=Long.parseLong(p[i].trim());
+        long[] ans=solution(nums);
+        System.out.print(Arrays.toString(ans).replace(" ", ""));
+    }
+}`
         return `// ${problemName} — read JSON [nums, target] from STDIN, print result as JSON
 import java.util.*; import java.io.*; import java.util.stream.Collectors;
 public class Main {
@@ -707,6 +792,54 @@ public class Main {
 }`
 
       case 'cpp':
+        if (shape === 'number') return `// ${problemName}
+#include <iostream>
+#include <string>
+#include <sstream>
+using namespace std;
+// Your logic here
+long long solution(long long n){
+    // Your code here
+    return 0;
+}
+int main(){
+    ios::sync_with_stdio(false); cin.tie(nullptr);
+    string all, line;
+    while(getline(cin, line)) all+=line;
+    stringstream ss(all); long long n; ss>>n;
+    cout<<solution(n);
+    return 0;
+}`
+        if (shape === 'array') return `// ${problemName}
+#include <iostream>
+#include <vector>
+#include <string>
+#include <sstream>
+using namespace std;
+// Your logic here
+vector<long long> solution(vector<long long>& nums){
+    // Your code here
+    return {};
+}
+int main(){
+    ios::sync_with_stdio(false); cin.tie(nullptr);
+    string all, line;
+    while(getline(cin, line)) all+=line;
+    auto trim=[](string s){ size_t a=s.find_first_not_of(" \\t\\n\\r"); if(a==string::npos) return string(""); size_t b=s.find_last_not_of(" \\t\\n\\r"); return s.substr(a,b-a+1); };
+    all=trim(all);
+    if(all.empty()) return 0;
+    string inner=all.substr(1, all.size()-2);
+    vector<long long> nums;
+    if(!inner.empty()){
+        stringstream ss(inner); string tok;
+        while(getline(ss, tok, ',')){ try{ nums.push_back(stoll(trim(tok))); }catch(...){} }
+    }
+    auto ans=solution(nums);
+    cout<<"[";
+    for(size_t i=0;i<ans.size();i++){ if(i) cout<<","; cout<<ans[i]; }
+    cout<<"]";
+    return 0;
+}`
         return `// ${problemName} — read JSON [nums, target] from STDIN, print result
 #include <iostream>
 #include <vector>
@@ -754,6 +887,36 @@ int main(){
 }`
 
       case 'csharp':
+        if (shape === 'number') return `// ${problemName}
+using System; using System.Linq;
+class Program{
+    static long Solution(long n){
+        // Your code here
+        return 0;
+    }
+    static void Main(){
+        string input=Console.In.ReadToEnd().Trim();
+        if(string.IsNullOrEmpty(input)) return;
+        long n=long.Parse(input.Trim());
+        Console.Write(Solution(n));
+    }
+}`
+        if (shape === 'array') return `// ${problemName}
+using System; using System.Linq;
+class Program{
+    static long[] Solution(long[] nums){
+        // Your code here
+        return new long[0];
+    }
+    static void Main(){
+        string input=Console.In.ReadToEnd().Trim();
+        if(string.IsNullOrEmpty(input)) return;
+        string inner=input.Substring(1, input.Length-2).Trim();
+        long[] nums = inner.Length==0 ? new long[0] : inner.Split(',').Select(s=>long.Parse(s.Trim())).ToArray();
+        var ans=Solution(nums);
+        Console.Write("["+string.Join(",", ans)+"]");
+    }
+}`
         return `// ${problemName} — read JSON [nums, target] from STDIN
 using System; using System.Linq; using System.Collections.Generic;
 class Program{
@@ -786,6 +949,20 @@ class Program{
 }`
 
       case 'php':
+        if (shape === 'number') return `<?php
+// ${problemName}
+function solution($n) {
+    // Your code here
+    return 0;
+}
+?>`
+        if (shape === 'array') return `<?php
+// ${problemName}
+function solution($nums) {
+    // Your code here
+    return [];
+}
+?>`
         return `<?php
 // ${problemName}
 function solution($nums, $target) {
@@ -795,6 +972,16 @@ function solution($nums, $target) {
 ?>`
 
       case 'ruby':
+        if (shape === 'number') return `# ${problemName}
+def solution(n)
+  # Your code here
+  0
+end`
+        if (shape === 'array') return `# ${problemName}
+def solution(nums)
+  # Your code here
+  []
+end`
         return `# ${problemName}
 def solution(nums, target)
   # Your code here
@@ -802,6 +989,16 @@ def solution(nums, target)
 end`
 
       case 'go':
+        if (shape === 'number') return `// ${problemName}
+func solution(n int64) int64 {
+    // Your code here
+    return 0
+}`
+        if (shape === 'array') return `// ${problemName}
+func solution(nums []int64) []int64 {
+    // Your code here
+    return []int64{}
+}`
         return `// ${problemName}
 func solution(nums []int, target int) []int {
     // Your code here
@@ -810,7 +1007,7 @@ func solution(nums []int, target int) []int {
 
       case 'rust':
         return `// ${problemName}
-pub fn solution(nums: Vec<i32>, target: i32) -> Vec<i32> {
+pub fn solution(input: Vec<i64>) -> Vec<i64> {
     // Your code here
     vec![]
 }`
@@ -856,7 +1053,7 @@ function solution(input) {
     if (existing && existing.trim().length>0) {
       setCode(existing)
     } else {
-      setCode(generateCodeTemplate(newLanguage, problems[currentProblemIndex]?.title))
+      setCode(generateCodeTemplate(newLanguage, problems[currentProblemIndex]))
     }
     setSelectedLanguage(newLanguage)
   }

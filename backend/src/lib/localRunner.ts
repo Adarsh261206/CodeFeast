@@ -20,6 +20,18 @@ function outputsEqual(a: string, b: string): boolean {
   return strip(sa) === strip(sb)
 }
 
+// Normalize non-JSON "display" testcase inputs into strict JSON that harnesses expect.
+// DB stores inputs like "[2,7,11,15], 9" (readable form) but all language harnesses
+// parse JSON. Convert "[a,b,c], target" -> "[[a,b,c],target]". Valid JSON passes through.
+export function normalizeInput(input: string): string {
+  const s = String(input ?? '').trim()
+  if (!s) return s
+  try { JSON.parse(s); return s } catch {}
+  const m = s.match(/^(\[.*\]),\s*(.+)$/)
+  if (m) return `[${m[1]},${m[2]}]`
+  return s
+}
+
 // --- JS ---
 export async function runJavascript(code: string, input: string): Promise<{ output: string; error: string | null; passed: boolean; expected?: string }> {
   // reused vm logic with generic harness
@@ -487,37 +499,38 @@ do {
 // Main dispatcher
 export async function executeLocal(language: string, code: string, input: string): Promise<{ output: string; error: string | null }> {
   const lang = language.toLowerCase()
+  const normalized = normalizeInput(input)
   try {
     if (lang === 'javascript') {
-      const r = await runJavascript(code, input)
+      const r = await runJavascript(code, normalized)
       return { output: r.output, error: r.error }
     }
     if (lang === 'typescript') {
-      return await runTypescript(code, input)
+      return await runTypescript(code, normalized)
     }
     if (lang === 'python') {
-      return await runPython(code, input)
+      return await runPython(code, normalized)
     }
     if (lang === 'java') {
-      return await runJava(code, input)
+      return await runJava(code, normalized)
     }
     if (lang === 'cpp' || lang === 'c++') {
-      return await runCpp(code, input)
+      return await runCpp(code, normalized)
     }
     if (lang === 'csharp' || lang === 'c#' || lang === 'c-sharp') {
-      return await runCsharp(code, input)
+      return await runCsharp(code, normalized)
     }
     if (lang === 'go' || lang === 'golang') {
-      return await runGo(code, input)
+      return await runGo(code, normalized)
     }
     if (lang === 'ruby' || lang === 'rb') {
-      return await runRuby(code, input)
+      return await runRuby(code, normalized)
     }
     if (lang === 'php') {
-      return await runPhp(code, input)
+      return await runPhp(code, normalized)
     }
     if (lang === 'swift') {
-      return await runSwift(code, input)
+      return await runSwift(code, normalized)
     }
     if (lang === 'html') {
       // HTML is markup, not logic — for DSA, just echo input or code length
@@ -531,7 +544,7 @@ export async function executeLocal(language: string, code: string, input: string
       return { output: 'Rust not yet installed — brew install rust', error: 'Rust not available' }
     }
     // fallback for other languages: try javascript vm as generic
-    const r = await runJavascript(code, input)
+    const r = await runJavascript(code, normalized)
     return { output: r.output, error: r.error }
   } catch (e: any) {
     return { output: 'Execution failed', error: e.message }

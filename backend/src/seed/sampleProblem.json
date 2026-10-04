@@ -60,16 +60,17 @@
     },
     {
       "input": "[999999,999998,999997,999996,999995], 1999995",
-      "output": "[0,1]"
+      "output": "[1,2]"
     }
   ],
   "solution_template": "function solution(nums, target) {\n  // Your solution here\n  // nums is an array of integers\n  // target is the sum we're looking for\n  // Return an array with two indices [i, j] where nums[i] + nums[j] == target\n  \n  // Example solution (comment this out and write your own):\n  // const map = new Map();\n  // for (let i = 0; i < nums.length; i++) {\n  //   const complement = target - nums[i];\n  //   if (map.has(complement)) {\n  //     return [map.get(complement), i];\n  //   }\n  //   map.set(nums[i], i);\n  // }\n  // return [];\n  \n  // Your code here:\n  return [];\n}",
   "difficulty": "Easy",
-  "tags": ["Array", "Hash Table", "Two Pointers"],
+  "tags": [
+    "Array",
+    "Hash Table",
+    "Two Pointers"
+  ],
   "timeComplexity": "O(n)",
   "spaceComplexity": "O(n)",
   "category": "Algorithms"
 }
-
-
-
