@@ -184,6 +184,8 @@ router.post('/submit', requireAuth, async (req: AuthRequest, res) => {
       const sa = String(a ?? '').trim(); const se = String(e ?? '').trim()
       if (se === '') return true
       try { return JSON.stringify(JSON.parse(sa)) === JSON.stringify(JSON.parse(se)) } catch {}
+      const unq = (s: string) => { try { const j = JSON.parse(s); return typeof j === 'string' ? j : s } catch { return s } }
+      if (unq(sa) === unq(se)) return true
       const strip = (s: string) => s.replace(/\s*,\s*/g,',').replace(/\s*\[\s*/g,'[').replace(/\s*\]\s*/g,']').trim()
       return strip(sa) === strip(se)
     }

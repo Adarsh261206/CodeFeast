@@ -14,6 +14,8 @@ function outputsEqual(a: string, b: string): boolean {
     const je = JSON.parse(sb)
     return JSON.stringify(ja) === JSON.stringify(je)
   } catch {}
+  const unq = (s: string) => { try { const j = JSON.parse(s); return typeof j === 'string' ? j : s } catch { return s } }
+  if (unq(sa) === unq(sb)) return true
   const norm = (s: string) => s.replace(/\r\n/g, '\n').trim().replace(/[ \t]+/g, ' ').replace(/\n\s*\n/g, '\n')
   if (norm(sa) === norm(sb)) return true
   const strip = (s: string) => s.replace(/\s*,\s*/g, ',').replace(/\s*\[\s*/g, '[').replace(/\s*\]\s*/g, ']').trim()
@@ -29,7 +31,62 @@ export function normalizeInput(input: string): string {
   try { JSON.parse(s); return s } catch {}
   const m = s.match(/^(\[.*\]),\s*(.+)$/)
   if (m) return `[${m[1]},${m[2]}]`
-  return s
+  // Plain string values (e.g. "leet**cod*e" or leet**cod*e) -> JSON-quote them so
+  // JSON-based harnesses (python/ruby/php/go) parse them correctly.
+  if (/^-?\d+$/.test(s)) return s
+  if (/^[\[{]/.test(s)) return s
+  return JSON.stringify(s)
+}
+
+// Detect a LeetCode-style "class Solution { public: retType methodName(paramType param) }"
+// and return the parsed method so the runner can auto-generate a main() harness.
+function detectSolutionMethod(code: string): { retType: string; name: string; paramType: string; paramName: string } | null {
+  const classMatch = code.match(/class\s+Solution\s*\{[\s\S]*?public\s*:([\s\S]*?)\};/)
+  const body = classMatch ? classMatch[1] : code
+  const method = body.match(/\b([A-Za-z_][\w:<>, ]*?)\s+(\w+)\s*\(\s*([A-Za-z_&][\w:&<>]*?)\s+(\w+)\s*\)/)
+  if (!method) return null
+  return { retType: method[1].trim(), name: method[2], paramType: method[3].trim(), paramName: method[4] }
+}
+
+// If user pasted LeetCode-style C++ code (class Solution, no main), wrap it with a
+// generated main() that reads input and calls the detected method.
+function wrapLeetCodeCpp(code: string): string {
+  if (/\bint\s+main\s*\(/.test(code)) return code
+  if (!code.includes('class Solution')) return code
+  const method = detectSolutionMethod(code)
+  if (!method) return code
+  const { name } = method
+  // LeetCode provides includes/namespace implicitly — add them if the paste lacks them.
+  const prelude: string[] = []
+  if (!code.includes('#include <iostream>')) prelude.push('#include <iostream>')
+  if (!code.includes('#include <string>')) prelude.push('#include <string>')
+  if (!/using\s+namespace\s+std\s*;/.test(code)) prelude.push('using namespace std;')
+  const head = prelude.length ? prelude.join('\n') + '\n' : ''
+  const isString = (t: string) => /string/.test(t)
+  if (isString(method.paramType)) {
+    // Single string param: read stdin, strip JSON quotes, call method, print result.
+    const main = `
+int main() {
+    std::string s, line;
+    while (std::getline(std::cin, line)) s += line;
+    if (s.size() >= 2 && s.front() == '"' && s.back() == '"') s = s.substr(1, s.size() - 2);
+    Solution sol;
+    std::cout << sol.${name}(s);
+    return 0;
+}`
+    return `${head}${code}\n${main}\n`
+  }
+  // Fallback generic: try JSON-parse a single array/number arg and print as JSON/plain.
+  const main = `
+int main() {
+    std::string all, line;
+    while (std::getline(std::cin, line)) all += line;
+    Solution sol;
+    auto res = sol.${name}(all);
+    std::cout << res;
+    return 0;
+}`
+  return `${head}${code}\n${main}\n`
 }
 
 // --- JS ---
@@ -54,6 +111,11 @@ export async function runJavascript(code: string, input: string): Promise<{ outp
   const ctx = vm.createContext(sandbox, { name: 'js-sandbox' } as any)
   const wrapped = `
     ${code}
+    if (typeof solution !== 'function') {
+      // LeetCode-style paste: pick the first user-defined function (e.g. var removeStars = function)
+      const fns = Object.keys(this).filter(k => typeof this[k] === 'function' && this[k].toString().indexOf('[native code]') === -1);
+      if (fns.length > 0) { this.solution = this[fns[fns.length - 1]]; }
+    }
     if (typeof solution !== 'function') throw new Error('solution function not defined');
     if (Array.isArray(parsed) && parsed.length===2 && Array.isArray(parsed[0])) {
       result = solution(parsed[0], parsed[1]);
@@ -128,12 +190,18 @@ def _cf_run():
         sys.stderr.write(str(e))
         sys.exit(1)
     try:
-        if 'solution' not in globals():
-            raise NameError('solution function not defined')
-        if isinstance(parsed, list) and len(parsed)==2 and isinstance(parsed[0], list):
-            res = solution(parsed[0], parsed[1])
+        if 'solution' in globals() and callable(solution):
+            if isinstance(parsed, list) and len(parsed)==2 and isinstance(parsed[0], list):
+                res = solution(parsed[0], parsed[1])
+            else:
+                res = solution(parsed)
+        elif 'Solution' in globals() and isinstance(Solution, type):
+            # LeetCode-style class Solution: call its first public method
+            inst = Solution()
+            method = next(m for m in dir(inst) if not m.startswith('_') and callable(getattr(inst, m)))
+            res = getattr(inst, method)(parsed)
         else:
-            res = solution(parsed)
+            raise NameError('solution function not defined')
     except Exception as e:
         sys.stderr.write(str(e))
         sys.exit(1)
@@ -168,15 +236,16 @@ if __name__ == "__main__":
 
 // --- Java ---
 export async function runJava(code: string, input: string): Promise<{ output: string; error: string | null }> {
-  // code is expected to be full Main.java (as per template). We just compile and run it.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cf-java-'))
   const file = path.join(tmp, 'Main.java')
-  // If code contains "class Main" use as is, else wrap Solution class into Main
   let source = code
-  if (!code.includes('class Main')) {
-    // If user gave only Solution class, wrap with generic Main for TwoSum that we provide as fallback
-    // But our templates now always give Main, so this is just fallback
-    source = code
+  if (!code.includes('class Main') && code.includes('class Solution')) {
+    // LeetCode-style paste: wrap class Solution with a Main that reads stdin.
+    const cleaned = code.replace(/public\s+class\s+Solution/g, 'class Solution')
+    const method = detectSolutionMethod(cleaned)
+    if (method && /string/i.test(method.paramType)) {
+      source = `import java.util.*; import java.io.*; import java.util.stream.Collectors;\n${cleaned}\npublic class Main {\n    public static void main(String[] args) throws Exception {\n        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));\n        String input = br.lines().collect(Collectors.joining()).trim();\n        if (input.length() >= 2 && input.charAt(0) == '"' && input.charAt(input.length()-1) == '"') input = input.substring(1, input.length()-1);\n        System.out.print(new Solution().${method.name}(input));\n    }\n}\n`
+    }
   }
   fs.writeFileSync(file, source)
   try {
@@ -205,7 +274,8 @@ export async function runCpp(code: string, input: string): Promise<{ output: str
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cf-cpp-'))
   const src = path.join(tmp, 'solution.cpp')
   const bin = path.join(tmp, 'a.out')
-  fs.writeFileSync(src, code)
+  const wrapped = wrapLeetCodeCpp(code)
+  fs.writeFileSync(src, wrapped)
   try {
     const compile = await spawnWithInput('g++', ['-std=c++17', '-O2', '-o', bin, src], '', 5000)
     if (compile.code !== 0) {

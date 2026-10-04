@@ -632,7 +632,7 @@ export default function LiveAssessment() {
     }
   }
 
-  const detectProblemShape = (problem?: Problem): 'twosum' | 'array' | 'number' | 'generic' => {
+  const detectProblemShape = (problem?: Problem): 'twosum' | 'array' | 'number' | 'string' | 'generic' => {
     const first = (problem?.visible_testcases?.[0]?.input || problem?.examples?.[0]?.input || '').trim()
     if (!first) return 'generic'
     try {
@@ -642,12 +642,14 @@ export default function LiveAssessment() {
         return 'array'
       }
       if (typeof p === 'number') return 'number'
+      if (typeof p === 'string') return 'string'
       return 'generic'
     } catch {
       const m = first.match(/^(\[.*\]),\s*(.+)$/)
       if (m) return 'twosum'
       if (/^\[.*\]$/.test(first)) return 'array'
       if (/^-?\d+$/.test(first)) return 'number'
+      if (/^".*"$/.test(first) || /[a-zA-Z]/.test(first)) return 'string'
       return 'generic'
     }
   }
@@ -658,6 +660,11 @@ export default function LiveAssessment() {
 
     switch (lang) {
       case 'javascript':
+        if (shape === 'string') return `// ${problemName}
+function solution(s) {
+  // Your code here
+  return "";
+}`
         if (shape === 'number') return `// ${problemName}
 function solution(n) {
   // Your code here
@@ -675,6 +682,11 @@ function solution(nums, target) {
 }`
 
       case 'typescript':
+        if (shape === 'string') return `// ${problemName}
+function solution(s: string): string {
+  // Your code here
+  return "";
+}`
         if (shape === 'number') return `// ${problemName}
 function solution(n: number): number {
   // Your code here
@@ -692,6 +704,10 @@ function solution(nums: number[], target: number): number[] {
 }`
 
       case 'python':
+        if (shape === 'string') return `# ${problemName}
+def solution(s):
+    # Your code here
+    return ""`
         if (shape === 'number') return `# ${problemName}
 def solution(n):
     # Your code here
@@ -706,6 +722,23 @@ def solution(nums, target):
     return []`
 
       case 'java':
+        if (shape === 'string') return `// ${problemName}
+import java.util.*; import java.io.*; import java.util.stream.Collectors;
+public class Main {
+    // Implement your logic here
+    public static String solution(String s) {
+        // Your code here
+        return "";
+    }
+    public static void main(String[] args) throws Exception {
+        BufferedReader br=new BufferedReader(new InputStreamReader(System.in));
+        String input=br.lines().collect(Collectors.joining()).trim();
+        if(input.isEmpty()) return;
+        if(input.length()>=2 && input.charAt(0)=='"' && input.charAt(input.length()-1)=='"')
+            input=input.substring(1, input.length()-1);
+        System.out.print(solution(input));
+    }
+}`
         if (shape === 'number') return `// ${problemName}
 import java.util.*; import java.io.*; import java.util.stream.Collectors;
 public class Main {
@@ -792,6 +825,28 @@ public class Main {
 }`
 
       case 'cpp':
+        if (shape === 'string') return `// ${problemName} — LeetCode style, read string from STDIN
+#include <iostream>
+#include <string>
+using namespace std;
+
+class Solution {
+public:
+    string solution(string s) {
+        // Your code here
+        return "";
+    }
+};
+
+int main(){
+    ios::sync_with_stdio(false); cin.tie(nullptr);
+    string s, line;
+    while(getline(cin, line)) s+=line;
+    if(s.size()>=2 && s.front()=='"' && s.back()=='"') s=s.substr(1, s.size()-2);
+    Solution sol;
+    cout<<sol.solution(s);
+    return 0;
+}`
         if (shape === 'number') return `// ${problemName}
 #include <iostream>
 #include <string>
@@ -887,6 +942,19 @@ int main(){
 }`
 
       case 'csharp':
+        if (shape === 'string') return `// ${problemName}
+using System;
+class Program{
+    static string Solution(string s){
+        // Your code here
+        return "";
+    }
+    static void Main(){
+        string input=Console.In.ReadToEnd();
+        if(input.Length>=2 && input[0]=='"' && input[input.Length-1]=='"') input=input.Substring(1, input.Length-2);
+        Console.Write(Solution(input));
+    }
+}`
         if (shape === 'number') return `// ${problemName}
 using System; using System.Linq;
 class Program{
@@ -949,6 +1017,13 @@ class Program{
 }`
 
       case 'php':
+        if (shape === 'string') return `<?php
+// ${problemName}
+function solution($s) {
+    // Your code here
+    return "";
+}
+?>`
         if (shape === 'number') return `<?php
 // ${problemName}
 function solution($n) {
@@ -972,6 +1047,11 @@ function solution($nums, $target) {
 ?>`
 
       case 'ruby':
+        if (shape === 'string') return `# ${problemName}
+def solution(s)
+  # Your code here
+  ""
+end`
         if (shape === 'number') return `# ${problemName}
 def solution(n)
   # Your code here
@@ -989,6 +1069,29 @@ def solution(nums, target)
 end`
 
       case 'go':
+        if (shape === 'string') return `// ${problemName}
+package main
+
+import (
+    "fmt"
+    "io"
+    "os"
+    "strings"
+)
+
+func solution(s string) string {
+    // Your code here
+    return ""
+}
+
+func main() {
+    data, _ := io.ReadAll(os.Stdin)
+    s := strings.TrimSpace(string(data))
+    if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+        s = s[1 : len(s)-1]
+    }
+    fmt.Print(solution(s))
+}`
         if (shape === 'number') return `// ${problemName}
 func solution(n int64) int64 {
     // Your code here

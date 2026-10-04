@@ -30,6 +30,8 @@ function outputsEqual(actual: string, expected: string): boolean {
     const je = JSON.parse(e)
     return JSON.stringify(ja) === JSON.stringify(je)
   } catch {}
+  const unq = (s: string) => { try { const j = JSON.parse(s); return typeof j === 'string' ? j : s } catch { return s } }
+  if (unq(a) === unq(e)) return true
   const norm = (s: string) => s.replace(/\r\n/g,'\n').trim().replace(/[ \t]+/g,' ').replace(/\n\s*\n/g,'\n')
   if (norm(a) === norm(e)) return true
   const strip = (s: string) => s.replace(/\s*,\s*/g,',').replace(/\s*\[\s*/g,'[').replace(/\s*\]\s*/g,']').trim()
