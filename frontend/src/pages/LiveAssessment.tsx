@@ -780,28 +780,28 @@ function solution(nums, target) {
 }`
 
       case 'typescript':
-        if (shape === 'string') return `// ${problemName} — LeetCode style
+        if (shape === 'string') return `// ${problemName}
 class Solution {
     solution(s: string): string {
         // Your code here
         return "";
     }
 }`
-        if (shape === 'number') return `// ${problemName} — LeetCode style
+        if (shape === 'number') return `// ${problemName}
 class Solution {
     solution(n: number): number {
         // Your code here
         return 0;
     }
 }`
-        if (shape === 'array') return `// ${problemName} — LeetCode style
+        if (shape === 'array') return `// ${problemName}
 class Solution {
     solution(nums: number[]): number[] {
         // Your code here
         return [];
     }
 }`
-        return `// ${problemName} — LeetCode style
+        return `// ${problemName}
 class Solution {
     solution(nums: number[], target: number): number[] {
         // Your code here
@@ -810,50 +810,50 @@ class Solution {
 }`
 
       case 'python':
-        if (shape === 'string') return `# ${problemName} — LeetCode style
+        if (shape === 'string') return `# ${problemName}
 class Solution:
     def solution(self, s):
         # Your code here
         return ""`
-        if (shape === 'number') return `# ${problemName} — LeetCode style
+        if (shape === 'number') return `# ${problemName}
 class Solution:
     def solution(self, n):
         # Your code here
         return 0`
-        if (shape === 'array') return `# ${problemName} — LeetCode style
+        if (shape === 'array') return `# ${problemName}
 class Solution:
     def solution(self, nums):
         # Your code here
         return []`
-        return `# ${problemName} — LeetCode style
+        return `# ${problemName}
 class Solution:
     def solution(self, nums, target):
         # Your code here
         return []`
 
       case 'java':
-        if (shape === 'string') return `// ${problemName} — LeetCode style
+        if (shape === 'string') return `// ${problemName}
 class Solution {
     public String solution(String s) {
         // Your code here
         return "";
     }
 }`
-        if (shape === 'number') return `// ${problemName} — LeetCode style
+        if (shape === 'number') return `// ${problemName}
 class Solution {
     public long solution(long n) {
         // Your code here
         return 0;
     }
 }`
-        if (shape === 'array') return `// ${problemName} — LeetCode style
+        if (shape === 'array') return `// ${problemName}
 class Solution {
     public long[] solution(long[] nums) {
         // Your code here
         return new long[]{};
     }
 }`
-        return `// ${problemName} — LeetCode style
+        return `// ${problemName}
 class Solution {
     public int[] solution(int[] nums, int target) {
         // Your code here
@@ -862,7 +862,7 @@ class Solution {
 }`
 
       case 'cpp':
-        if (shape === 'string') return `// ${problemName} — LeetCode style
+        if (shape === 'string') return `// ${problemName}
 #include <string>
 using namespace std;
 
@@ -873,7 +873,7 @@ public:
         return "";
     }
 };`
-        if (shape === 'number') return `// ${problemName} — LeetCode style
+        if (shape === 'number') return `// ${problemName}
 class Solution {
 public:
     long long solution(long long n) {
@@ -881,7 +881,7 @@ public:
         return 0;
     }
 };`
-        if (shape === 'array') return `// ${problemName} — LeetCode style
+        if (shape === 'array') return `// ${problemName}
 #include <vector>
 using namespace std;
 
@@ -892,7 +892,7 @@ public:
         return {};
     }
 };`
-        return `// ${problemName} — LeetCode style
+        return `// ${problemName}
 #include <vector>
 using namespace std;
 
@@ -905,28 +905,28 @@ public:
 };`
 
       case 'csharp':
-        if (shape === 'string') return `// ${problemName} — LeetCode style
+        if (shape === 'string') return `// ${problemName}
 public class Solution {
     public string solution(string s) {
         // Your code here
         return "";
     }
 }`
-        if (shape === 'number') return `// ${problemName} — LeetCode style
+        if (shape === 'number') return `// ${problemName}
 public class Solution {
     public long solution(long n) {
         // Your code here
         return 0;
     }
 }`
-        if (shape === 'array') return `// ${problemName} — LeetCode style
+        if (shape === 'array') return `// ${problemName}
 public class Solution {
     public long[] solution(long[] nums) {
         // Your code here
         return new long[0];
     }
 }`
-        return `// ${problemName} — LeetCode style
+        return `// ${problemName}
 public class Solution {
     public int[] solution(int[] nums, int target) {
         // Your code here
@@ -936,7 +936,7 @@ public class Solution {
 
       case 'php':
         if (shape === 'string') return `<?php
-// ${problemName} — LeetCode style
+// ${problemName}
 class Solution {
     function solution($s) {
         // Your code here
@@ -945,7 +945,7 @@ class Solution {
 }
 ?>`
         if (shape === 'number') return `<?php
-// ${problemName} — LeetCode style
+// ${problemName}
 class Solution {
     function solution($n) {
         // Your code here
@@ -954,7 +954,7 @@ class Solution {
 }
 ?>`
         if (shape === 'array') return `<?php
-// ${problemName} — LeetCode style
+// ${problemName}
 class Solution {
     function solution($nums) {
         // Your code here
@@ -963,7 +963,7 @@ class Solution {
 }
 ?>`
         return `<?php
-// ${problemName} — LeetCode style
+// ${problemName}
 class Solution {
     function solution($nums, $target) {
         // Your code here
@@ -995,7 +995,7 @@ def solution(nums, target)
 end`
 
       case 'go':
-        if (shape === 'string') return `// ${problemName} — LeetCode style
+        if (shape === 'string') return `// ${problemName}
 func solution(s string) string {
     // Your code here
     return ""
