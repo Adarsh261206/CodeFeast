@@ -8,6 +8,8 @@ import BackgroundCanvas from '@/components/BackgroundCanvas'
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
+  const [rollNumber, setRollNumber] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [isRegister, setIsRegister] = useState(false)
@@ -35,7 +37,8 @@ export default function Login() {
           
           try {
             const endpoint = isRegister ? '/auth/register' : '/auth/login'
-            const res = await api.post(endpoint, { email, password })
+            const payload = isRegister ? { email, password, name: name.trim(), rollNumber: rollNumber.trim() } : { email, password }
+            const res = await api.post(endpoint, payload)
             localStorage.setItem('cf_token', res.data.token)
             localStorage.setItem('cf_email', res.data.user.email)
             localStorage.setItem('cf_role', res.data.user.role)
@@ -56,6 +59,33 @@ export default function Login() {
         }}
       >
         <h1 className="text-2xl font-bold tracking-tight">{isRegister ? 'Create account' : 'Login'}</h1>
+        {isRegister && (
+          <>
+            <label className="block text-sm font-medium text-slate-700">Name</label>
+            <input
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus-ring placeholder:text-slate-400"
+              type="text"
+              required
+              minLength={2}
+              maxLength={100}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Full name (as on ID card)"
+              autoComplete="name"
+            />
+            <label className="block text-sm font-medium text-slate-700">Roll No</label>
+            <input
+              className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus-ring placeholder:text-slate-400"
+              type="text"
+              required
+              maxLength={30}
+              value={rollNumber}
+              onChange={(e) => setRollNumber(e.target.value)}
+              placeholder="e.g. 21CS10042"
+              autoComplete="off"
+            />
+          </>
+        )}
         <label className="block text-sm font-medium text-slate-700">Email</label>
         <input
           className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus-ring placeholder:text-slate-400"

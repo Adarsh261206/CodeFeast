@@ -117,6 +117,23 @@ router.get('/', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     })
     // Sort by lastUpdated desc and paginate after grouping (correct)
     reports.sort((a:any,b:any)=> new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime())
+    // Attach name/rollNo from users so admin can identify candidates (fallback: email only)
+    try {
+      const emails = [...new Set(reports.map((r: any) => r.candidateEmail).filter(Boolean))] as string[]
+      if (emails.length) {
+        const users = await db.collection('users')
+          .find({ email: { $in: emails } }, { projection: { email: 1, name: 1, rollNumber: 1 } })
+          .toArray()
+        const byEmail = new Map(users.map((u: any) => [u.email, u]))
+        for (const r of reports as any[]) {
+          const u = byEmail.get(r.candidateEmail)
+          if (u) {
+            r.candidateName = u.name || ''
+            r.rollNumber = u.rollNumber || ''
+          }
+        }
+      }
+    } catch { /* identification is best-effort — reports still return */ }
     const total = reports.length
     const paged = reports.slice(skip, skip+limit)
     res.json({ reports: paged, total, limit, skip })

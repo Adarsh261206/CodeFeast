@@ -6,6 +6,8 @@ import ConfirmModal from '@/components/ConfirmModal'
 type Report = {
   _id: string
   candidateEmail: string
+  candidateName?: string
+  rollNumber?: string
   assessmentId?: string
   totalTimeTakenSec: number
   averageScore: number
@@ -69,6 +71,8 @@ export default function Reports() {
       const cleanReports = reportsData.map((report: any) => ({
         _id: report._id || '',
         candidateEmail: report.candidateEmail || '',
+        candidateName: report.candidateName || '',
+        rollNumber: report.rollNumber || '',
         assessmentId: report.assessmentId || null,
         totalTimeTakenSec: Number(report.totalTimeTakenSec) || 0,
         averageScore: Number(report.averageScore) || 0,
@@ -120,7 +124,10 @@ export default function Reports() {
   }
 
   const filteredReports = reports.filter(report => {
-    const matchesSearch = report.candidateEmail.toLowerCase().includes(searchTerm.toLowerCase())
+    const q = searchTerm.toLowerCase()
+    const matchesSearch = report.candidateEmail.toLowerCase().includes(q)
+      || (report.candidateName || '').toLowerCase().includes(q)
+      || (report.rollNumber || '').toLowerCase().includes(q)
     const matchesLanguage = selectedLanguage === 'all' || (report.languages && report.languages.includes(selectedLanguage))
     return matchesSearch && matchesLanguage
   })
@@ -140,9 +147,9 @@ export default function Reports() {
   }
   const exportReports = () => {
     const csvContent = [
-      ['Email', 'Assessment ID', 'Average Score', 'Pass Rate', 'Problems Passed', 'Total Problems', 'Languages', 'Total Time (s)', 'Total Test Cases Passed', 'Created At'],
+      ['Name', 'Roll No', 'Email', 'Assessment ID', 'Average Score', 'Pass Rate', 'Problems Passed', 'Total Problems', 'Languages', 'Total Time (s)', 'Total Test Cases Passed', 'Created At'],
       ...sortedReports.map(r => [
-        r.candidateEmail, r.assessmentId || 'N/A', (r.averageScore * 100).toFixed(1) + '%', (r.passRate * 100).toFixed(1) + '%',
+        r.candidateName || '', r.rollNumber || '', r.candidateEmail, r.assessmentId || 'N/A', (r.averageScore * 100).toFixed(1) + '%', (r.passRate * 100).toFixed(1) + '%',
         (r.passedProblems || 0).toString(), (r.totalProblems || 0).toString(),
         r.languages && r.languages.length > 0 ? r.languages.join(', ') : 'N/A',
         (r.totalTimeTakenSec || 0).toString(),
@@ -258,7 +265,7 @@ export default function Reports() {
         <div className="flex flex-col md:flex-row gap-3">
           <div className="flex-1 relative">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" /></svg>
-            <input type="text" placeholder="Search by email…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 placeholder:text-slate-400" />
+            <input type="text" placeholder="Search by name, roll no or email…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300 placeholder:text-slate-400" />
           </div>
           <select value={selectedLanguage} onChange={(e) => setSelectedLanguage(e.target.value)} className="px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/10 min-w-[160px]">
             <option value="all">All Languages</option>
@@ -283,7 +290,7 @@ export default function Reports() {
           {sortedReports.map((report) => {
             const scorePct = Math.round((report.averageScore||0)*100)
             const scoreColor = scorePct >= 80 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : scorePct >= 50 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-rose-50 text-rose-700 border-rose-200'
-            const initial = report.candidateEmail[0]?.toUpperCase() || 'U'
+            const initial = (report.candidateName || report.candidateEmail)[0]?.toUpperCase() || 'U'
             return (
               <div key={report._id} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                 {/* Header */}
@@ -291,7 +298,15 @@ export default function Reports() {
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-9 h-9 rounded-full bg-slate-900 text-white grid place-items-center text-xs font-semibold shrink-0">{initial}</div>
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold text-slate-900 truncate">{report.candidateEmail}</div>
+                      <div className="text-sm font-semibold text-slate-900 truncate">
+                        {report.candidateName || report.candidateEmail}
+                        {report.rollNumber && (
+                          <span className="ml-2 inline-flex px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 text-[11px] font-medium align-middle">{report.rollNumber}</span>
+                        )}
+                      </div>
+                      {report.candidateName && (
+                        <div className="text-xs text-slate-400 truncate">{report.candidateEmail}</div>
+                      )}
                       <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5">
                         <span>{formatDate(report.lastUpdated)}</span>
                         <span className="w-1 h-1 rounded-full bg-slate-300" />

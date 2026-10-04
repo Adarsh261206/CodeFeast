@@ -29,15 +29,23 @@ const signJwt = (payload: { email: string; role: string }) =>
 
 const emailSchema = z.string().email().max(254).transform(s=>s.toLowerCase().trim())
 const passwordSchema = z.string().min(8).max(128)
+const nameSchema = z.string().trim().min(2).max(100)
+const rollNumberSchema = z.string().trim().min(1).max(30)
 
 // Helpers
 async function findUserByEmail(email: string) {
   return getDb().collection('users').findOne({ email })
 }
 
-async function createUser(email: string, passwordHash: string, role: 'admin'|'user' = 'user') {
-  const userDoc = { email, passwordHash, role, createdAt: new Date() }
+async function createUser(email: string, passwordHash: string, role: 'admin'|'user' = 'user', profile?: { name?: string; rollNumber?: string }) {
+  const userDoc = {
+    email, passwordHash, role,
+    name: profile?.name || '',
+    rollNumber: profile?.rollNumber || '',
+    createdAt: new Date()
+  }
   await getDb().collection('users').createIndex({ email: 1 }, { unique: true })
+  await getDb().collection('users').createIndex({ rollNumber: 1 }, { sparse: true })
   const res = await getDb().collection('users').insertOne(userDoc)
   return { _id: res.insertedId, ...userDoc }
 }
@@ -45,13 +53,20 @@ async function createUser(email: string, passwordHash: string, role: 'admin'|'us
 // Register with email/password — limiter per-route so /me is never limited (event: 300/15min else 100/15min)
 router.post('/register', activeAuthLimiter, async (req, res) => {
   try {
-    const parsed = z.object({ email: emailSchema, password: passwordSchema }).safeParse(req.body)
-    if (!parsed.success) return res.status(400).json({ error: 'Invalid email or password (min 8 chars)', details: parsed.error.flatten() })
-    const { email, password } = parsed.data
+    const parsed = z.object({
+      email: emailSchema,
+      password: passwordSchema,
+      name: nameSchema,
+      rollNumber: rollNumberSchema
+    }).safeParse(req.body)
+    if (!parsed.success) return res.status(400).json({ error: 'Invalid details — name (min 2 chars), roll no and password (min 8 chars) are required', details: parsed.error.flatten() })
+    const { email, password, name, rollNumber } = parsed.data
     const existing = await findUserByEmail(email)
     if (existing) {
       return res.status(409).json({ error: 'Account already exists' })
     }
+    const dupRoll = await getDb().collection('users').findOne({ rollNumber })
+    if (dupRoll) return res.status(409).json({ error: 'Roll No already registered' })
     const passwordHash = await bcrypt.hash(password, 10)
     // Secure admin seeding: only email in SEED_ADMIN_EMAIL can become admin on first user, otherwise user
     const usersCount = await getDb().collection('users').countDocuments()
@@ -65,9 +80,9 @@ router.post('/register', activeAuthLimiter, async (req, res) => {
         role = 'admin'
       }
     }
-    const created = await createUser(email, passwordHash, role)
+    const created = await createUser(email, passwordHash, role, { name, rollNumber })
     const token = signJwt({ email: created.email, role: created.role })
-    res.json({ token, user: { email: created.email, role: created.role } })
+    res.json({ token, user: { email: created.email, role: created.role, name: created.name, rollNumber: created.rollNumber } })
   } catch (e: any) {
     console.error('Register error:', e?.message)
     res.status(500).json({ error: 'Registration failed' })
@@ -86,7 +101,7 @@ router.post('/login', activeAuthLimiter, async (req, res) => {
     const ok = await bcrypt.compare(password, user.passwordHash)
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' })
     const token = signJwt({ email: user.email, role: user.role || 'user' })
-    res.json({ token, user: { email: user.email, role: user.role || 'user' } })
+    res.json({ token, user: { email: user.email, role: user.role || 'user', name: user.name || '', rollNumber: user.rollNumber || '' } })
   } catch (e: any) {
     console.error('Login error:', e?.message)
     res.status(500).json({ error: 'Login failed' })
@@ -140,9 +155,9 @@ router.get('/me', async (req, res) => {
   try {
     const decoded = jwt.verify(token, getJwtSecret()) as any
     // Validate against DB for fresh role
-    const dbUser = await getDb().collection('users').findOne({ email: decoded.email }, { projection: { email:1, role:1 } })
+    const dbUser = await getDb().collection('users').findOne({ email: decoded.email }, { projection: { email:1, role:1, name:1, rollNumber:1 } })
     if (!dbUser) return res.status(401).json({ error: 'User not found' })
-    res.json({ user: { email: dbUser.email, role: dbUser.role || decoded.role || 'user' } })
+    res.json({ user: { email: dbUser.email, role: dbUser.role || decoded.role || 'user', name: dbUser.name || '', rollNumber: dbUser.rollNumber || '' } })
   } catch (e) {
     res.status(401).json({ error: 'Invalid token' })
   }

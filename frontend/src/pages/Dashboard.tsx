@@ -92,7 +92,7 @@ export default function Dashboard() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">Dashboard</h1>
-            <p className="text-sm text-slate-500 mt-1">Welcome back, <span className="font-medium text-slate-900">{user?.email}</span> <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-slate-900 text-white border-slate-900">{user?.role}</span></p>
+            <p className="text-sm text-slate-500 mt-1">Welcome back, <span className="font-medium text-slate-900">{user?.name || user?.email}</span>{user?.name && user?.rollNumber && <span className="text-slate-400"> ({user.rollNumber})</span>} <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border bg-slate-900 text-white border-slate-900">{user?.role}</span></p>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> System operational</span>
