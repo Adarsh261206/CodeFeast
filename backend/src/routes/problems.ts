@@ -27,6 +27,26 @@ router.get('/sample', async (_req, res) => {
   }
 })
 
+// Full problem (including hidden testcases) — admin only.
+// The list endpoint strips hidden_testcases so candidates can never fetch them.
+router.get('/:id', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const dbUser = await getDb().collection('users').findOne({ email: req.user?.email }, { projection: { role: 1 } })
+    if ((dbUser?.role || req.user?.role) !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+    const { id } = req.params
+    let oid: any
+    try { oid = new (await import('mongodb')).ObjectId(id) } catch { return res.status(400).json({ error: 'Invalid id' }) }
+    const problem = await getDb().collection('problems').findOne({ _id: oid })
+    if (!problem) return res.status(404).json({ error: 'Problem not found' })
+    res.json({ problem })
+  } catch (e: any) {
+    console.error('Problem detail error:', e?.message)
+    res.status(500).json({ error: 'Failed to load problem' })
+  }
+})
+
 router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
     // Admin check via requireAdmin logic (re-validate DB)

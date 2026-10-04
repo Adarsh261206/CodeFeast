@@ -1,11 +1,12 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, ListChecks, FileCode2, BarChart3 } from 'lucide-react'
+import { LayoutDashboard, ListChecks, FileCode2, BarChart3, Trophy } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 
 const getItems = (isAdmin: boolean) => [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   ...(isAdmin ? [{ to: '/problems', label: 'Problems', icon: FileCode2 }] : []),
   { to: '/assessments', label: 'Assessments', icon: ListChecks },
+  { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },
   ...(isAdmin ? [{ to: '/reports', label: 'Reports', icon: BarChart3 }] : [])
 ]
 

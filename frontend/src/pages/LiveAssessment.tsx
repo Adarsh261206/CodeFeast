@@ -10,8 +10,8 @@ type Problem = {
   title: string
   statement: string
   constraints?: string
-  examples?: { input: string; output: string }[]
-  visible_testcases?: { input: string; output: string }[]
+  examples?: { input: string; output: string; title?: string }[]
+  visible_testcases?: { input: string; output: string; title?: string }[]
   hidden_testcases?: { input: string; output: string }[]
 }
 
@@ -1190,7 +1190,7 @@ function solution(input) {
                 )}
                 {currentProblem.examples && currentProblem.examples.length > 0 && (
                   <div className="mt-4">
-                    <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">Example</h3>
+                    <h3 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">{currentProblem.examples[0].title || 'Example'}</h3>
                     <div className="mt-2 bg-slate-50 border border-slate-200 rounded-lg p-3 font-mono text-sm">
                       <div><span className="font-semibold text-slate-900">Input:</span> <span className="text-slate-700">{currentProblem.examples[0].input}</span></div>
                       <div className="mt-1"><span className="font-semibold text-slate-900">Output:</span> <span className="text-slate-700">{currentProblem.examples[0].output}</span></div>
@@ -1213,7 +1213,7 @@ function solution(input) {
                     <div className="space-y-2">
                       {currentProblem.visible_testcases.slice(0,3).map((tc, i)=>(
                         <div key={i} className="flex items-center gap-2 text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-                          <span className="text-slate-500">#{i+1}</span>
+                          <span className="text-slate-500 shrink-0 max-w-[150px] truncate" title={tc.title || `#${i+1}`}>{tc.title || `#${i+1}`}</span>
                           <span className="truncate">in: {tc.input}</span>
                           <span className="ml-auto text-slate-400">→</span>
                           <span className="truncate">{tc.output}</span>

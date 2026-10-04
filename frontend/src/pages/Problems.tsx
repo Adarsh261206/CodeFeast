@@ -10,8 +10,8 @@ type Problem = {
   title: string
   statement: string
   constraints?: string
-  examples?: { input: string; output: string }[]
-  visible_testcases?: { input: string; output: string }[]
+  examples?: { input: string; output: string; title?: string }[]
+  visible_testcases?: { input: string; output: string; title?: string }[]
   hidden_testcases?: { input: string; output: string }[]
   createdAt?: string
 }
@@ -54,6 +54,16 @@ export default function Problems() {
 
   const requestDeleteProblem = (problemId: string) => {
     setConfirmDelete({ open: true, problemId })
+  }
+
+  // List endpoint strips hidden_testcases — fetch the full problem before editing
+  const startEdit = async (problem: Problem) => {
+    try {
+      const res = await api.get(`/problems/${problem._id}`)
+      setEditing(res.data.problem || problem)
+    } catch {
+      setEditing(problem)
+    }
   }
 
   const confirmDeleteProblem = async () => {
@@ -146,7 +156,7 @@ export default function Problems() {
                 {user?.role === 'admin' && (
                   <div className="flex gap-1">
                     <button 
-                      onClick={() => setEditing(problem)}
+                      onClick={() => startEdit(problem)}
                       className="p-1 text-accentSecondary hover:text-accentSecondary/70"
                       title="Edit"
                       aria-label={`Edit ${problem.title}`}
@@ -195,8 +205,14 @@ export default function Problems() {
 
                <div className="mt-3 flex gap-2">
                 <button 
-                  onClick={() => {
-                    setSelectedProblem(problem)
+                  onClick={async () => {
+                    // List strips hidden_testcases — fetch full problem so details show them
+                    let full = problem
+                    try {
+                      const res = await api.get(`/problems/${problem._id}`)
+                      full = res.data.problem || problem
+                    } catch {}
+                    setSelectedProblem(full)
                     setShowDetails(true)
                   }}
                   className="flex-1 bg-accentPrimary/20 hover:bg-accentPrimary/30 text-accentPrimary px-2 py-1 rounded text-xs transition"
@@ -247,6 +263,7 @@ export default function Problems() {
                   <div className="space-y-2">
                     {selectedProblem.examples.map((ex, idx) => (
                       <div key={idx} className="bg-surface/50 p-3 rounded-md">
+                        {ex.title && <div className="text-xs font-semibold text-warmAccent mb-1">{ex.title}</div>}
                         <div className="text-sm text-textSecondary">
                           <span className="font-medium">Input:</span> {ex.input}
                         </div>
@@ -267,6 +284,7 @@ export default function Problems() {
                   <div className="space-y-2">
                     {selectedProblem.visible_testcases?.map((tc, idx) => (
                       <div key={idx} className="bg-surface/50 p-3 rounded-md">
+                        {tc.title && <div className="text-xs font-semibold text-warmAccent mb-1">{tc.title}</div>}
                         <div className="text-sm text-textSecondary">
                           <span className="font-medium">Input:</span> {tc.input}
                         </div>

@@ -11,11 +11,20 @@ router.get('/', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
     const skip = Math.max(parseInt((req.query.skip as string) || '0', 10) || 0, 0)
     // Fetch all (capped at 1000) then group, then paginate — correct grouping vs pre-limit
     const submissions = await db.collection('reports').find().sort({ createdAt: -1 }).limit(1000).toArray()
-    
+
+    // Dedupe legacy duplicates: keep only the LATEST doc per (email, assessment, problem).
+    // Sorted createdAt desc → first occurrence is the latest attempt. Fixes inflated rows
+    // from repeated runs / language switches without a DB migration.
+    const latestByKey = new Map<string, any>()
+    for (const s of submissions) {
+      const key = `${s.candidateEmail || ''}|${s.assessmentId || ''}|${s.problemId || ''}`
+      if (!latestByKey.has(key)) latestByKey.set(key, s)
+    }
+
     // Group by assessment and user - FIXED: Use proper grouping key
     const groupedReports = new Map()
     
-    submissions.forEach(submission => {
+    latestByKey.forEach(submission => {
       // Create a unique key for each user-assessment combination
       const key = submission.assessmentId 
         ? `${submission.assessmentId}-${submission.candidateEmail}`
@@ -168,21 +177,33 @@ router.post('/submit', requireAuth, requireAdmin, async (req: AuthRequest, res) 
 router.post('/force-end', requireAuth, async (req: AuthRequest, res) => {
   const { reason, assessmentId, problemId, security, language, timeTakenSec } = req.body
   await getDb().collection('events').insertOne({ type: 'force_end', reason, assessmentId: assessmentId || null, problemId: problemId || null, security, candidateEmail: req.user?.email, createdAt: new Date() })
-  // also append a minimal report row so UI can show the violation even without submission
+  // Annotate the existing report for this problem instead of creating a duplicate row.
+  // Only create a minimal doc when the candidate never submitted anything (so the violation is still visible).
   try {
-    const doc: any = {
-      candidateEmail: req.user?.email || 'unknown',
-      assessmentId: assessmentId || null,
-      problemId: problemId || null,
-      timeTakenSec: typeof timeTakenSec === 'number' ? timeTakenSec : 0,
-      score: 0,
-      language: language || 'n/a',
-      results: [],
-      createdAt: new Date(),
-      security: security || undefined,
-      endedBy: { reason, at: new Date() }
+    const col = getDb().collection('reports')
+    const safeReason = String(reason || '').slice(0, 200)
+    const endedBy = { reason: safeReason, at: new Date() }
+    const filter = { candidateEmail: req.user?.email || 'unknown', assessmentId: assessmentId || null, problemId: problemId || null }
+    const existing = await col.findOne(filter, { sort: { createdAt: -1 }, projection: { _id: 1 } })
+    if (existing) {
+      const set: any = { endedBy }
+      if (security) set.security = security
+      await col.updateOne({ _id: existing._id }, { $set: set })
+    } else {
+      const doc: any = {
+        candidateEmail: filter.candidateEmail,
+        assessmentId: assessmentId || null,
+        problemId: problemId || null,
+        timeTakenSec: typeof timeTakenSec === 'number' ? timeTakenSec : 0,
+        score: 0,
+        language: language || 'n/a',
+        results: [],
+        createdAt: new Date(),
+        endedBy
+      }
+      if (security) doc.security = security
+      await col.insertOne(doc)
     }
-    await getDb().collection('reports').insertOne(doc)
   } catch {}
   res.json({ ok: true })
 })

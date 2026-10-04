@@ -7,6 +7,7 @@ import LiveAssessment from '@/pages/LiveAssessment'
 import Problems from '@/pages/Problems'
 import Assessments from '@/pages/Assessments'
 import Reports from '@/pages/Reports'
+import Leaderboard from '@/pages/Leaderboard'
 import Login from '@/pages/Login'
 import { useEffect } from 'react'
 import { useAuth } from './hooks/useAuth'
@@ -86,6 +87,7 @@ function App() {
                   <Route path="/live-assessment/:assessmentId" element={<Protected><LiveAssessment /></Protected>} />
                   <Route path="/problems" element={<Protected adminOnly><Problems /></Protected>} />
                   <Route path="/assessments" element={<Protected><Assessments /></Protected>} />
+                  <Route path="/leaderboard" element={<Protected><Leaderboard /></Protected>} />
                   <Route path="/reports" element={<Protected adminOnly><Reports /></Protected>} />
                 </Routes>
               </motion.div>

@@ -10,6 +10,7 @@ import adminRouter from './routes/admin'
 import reportsRouter from './routes/reports'
 import assessmentsRouter from './routes/assessments'
 import authRouter from './routes/auth'
+import leaderboardRouter from './routes/leaderboard'
 import { connectDb } from './lib/db'
 
 // Fail-fast if JWT secret missing in production
@@ -74,6 +75,7 @@ app.use('/api/runner', runnerRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/reports', reportsRouter)
 app.use('/api/assessments', assessmentsRouter)
+app.use('/api/leaderboard', leaderboardRouter)
 
 // Central error handler — sanitize CORS and other errors
 app.use((err: any, _req: any, res: any, _next: any) => {

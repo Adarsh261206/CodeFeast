@@ -11,8 +11,8 @@ const problemSchema = z.object({
   title: z.string().min(3).max(200),
   statement: z.string().min(10).max(10000),
   constraints: z.string().max(2000).optional().default(''),
-  examples: z.array(z.object({ input: z.string().min(1).max(2000), output: z.string().min(1).max(2000) })).min(1).max(10),
-  visible_testcases: z.array(z.object({ input: z.string().min(1).max(2000), output: z.string().min(1).max(2000) })).min(1).max(20),
+  examples: z.array(z.object({ input: z.string().min(1).max(2000), output: z.string().min(1).max(2000), title: z.string().trim().max(100).optional() })).min(1).max(10),
+  visible_testcases: z.array(z.object({ input: z.string().min(1).max(2000), output: z.string().min(1).max(2000), title: z.string().trim().max(100).optional() })).min(1).max(20),
   hidden_testcases: z.array(z.object({ input: z.string().min(1).max(2000), output: z.string().min(1).max(2000) })).min(1).max(30)
 })
 

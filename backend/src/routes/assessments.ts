@@ -270,8 +270,15 @@ router.post('/submit', requireAuth, async (req: AuthRequest, res) => {
           tabSwitches: security?.tabSwitches ?? 0,
           fullscreenExits: security?.fullscreenExits ?? 0
         },
-        createdAt: new Date()
+        createdAt: new Date(),
+        updatedAt: new Date()
       }
+      // ONE doc per (candidate, assessment, problem): re-runs, language switches and
+      // refresh auto-submits OVERWRITE the previous entry instead of duplicating rows
+      const filter = { candidateEmail: req.user?.email, assessmentId: assessmentId || null, problemId }
+      const prev = await getDb().collection('reports').findOne(filter, { projection: { endedBy: 1 } })
+      if (prev?.endedBy) reportDoc.endedBy = prev.endedBy // preserve termination marker
+      await getDb().collection('reports').deleteMany(filter)
       await getDb().collection('reports').insertOne(reportDoc)
     } catch (e) {
       // Non-fatal: do not block submission response if report insert fails

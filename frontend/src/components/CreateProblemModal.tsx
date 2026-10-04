@@ -6,8 +6,8 @@ type ProblemData = {
   title: string
   statement: string
   constraints?: string
-  examples?: { input: string; output: string }[]
-  visible_testcases?: { input: string; output: string }[]
+  examples?: { input: string; output: string; title?: string }[]
+  visible_testcases?: { input: string; output: string; title?: string }[]
   hidden_testcases?: { input: string; output: string }[]
 }
 
@@ -17,23 +17,30 @@ type Props = {
   problem?: ProblemData
 }
 
-const emptyRow = { input: '', output: '' }
+type Row = { input: string; output: string; title?: string }
+
+const emptyRow: Row = { input: '', output: '' }
 
 export default function CreateProblemModal({ onClose, onCreated, problem }: Props) {
   const [title, setTitle] = useState(problem?.title || '')
   const [statement, setStatement] = useState(problem?.statement || '')
   const [constraints, setConstraints] = useState(problem?.constraints || '')
-  const [examples, setExamples] = useState<{ input: string; output: string }[]>(problem?.examples?.length ? problem.examples : [emptyRow])
-  const [visible, setVisible] = useState<{ input: string; output: string }[]>(problem?.visible_testcases?.length ? problem.visible_testcases : [emptyRow])
+  const [examples, setExamples] = useState<Row[]>(problem?.examples?.length ? problem.examples : [emptyRow])
+  const [visible, setVisible] = useState<Row[]>(problem?.visible_testcases?.length ? problem.visible_testcases : [emptyRow])
   const [hidden, setHidden] = useState<{ input: string; output: string }[]>(problem?.hidden_testcases?.length ? problem.hidden_testcases : [emptyRow, emptyRow])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const addRow = (setter: Function) => setter((arr: any[]) => [...arr, { input: '', output: '' }])
-  const updateRow = (setter: Function, idx: number, field: 'input'|'output', value: string) => {
+  const updateRow = (setter: Function, idx: number, field: 'input'|'output'|'title', value: string) => {
     setter((arr: any[]) => arr.map((r, i) => i === idx ? { ...r, [field]: value } : r))
   }
   const removeRow = (setter: Function, idx: number) => setter((arr: any[]) => arr.filter((_, i) => i !== idx))
+  const withTitle = (r: Row) => ({
+    input: r.input,
+    output: r.output,
+    ...(r.title && r.title.trim() ? { title: r.title.trim() } : {})
+  })
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,8 +52,8 @@ export default function CreateProblemModal({ onClose, onCreated, problem }: Prop
       title,
       statement,
       constraints,
-      examples: examples.filter(e => e.input && e.output),
-      visible_testcases: visible.filter(v => v.input && v.output),
+      examples: examples.filter(e => e.input && e.output).map(withTitle),
+      visible_testcases: visible.filter(v => v.input && v.output).map(withTitle),
       hidden_testcases: hidden.filter(h => h.input && h.output)
     }
 
@@ -94,6 +101,7 @@ export default function CreateProblemModal({ onClose, onCreated, problem }: Prop
             <div className="space-y-2">
               {examples.map((ex, idx) => (
                 <div key={idx} className="grid md:grid-cols-2 gap-2">
+                  <input className="bg-surface border border-borderToken rounded p-2 md:col-span-2" placeholder="Title (optional) — e.g. Example 1" value={ex.title || ''} onChange={e=>updateRow(setExamples, idx, 'title', e.target.value)} />
                   <input className="bg-surface border border-borderToken rounded p-2" placeholder="Input" value={ex.input} onChange={e=>updateRow(setExamples, idx, 'input', e.target.value)} />
                   <div className="flex gap-2">
                     <input className="flex-1 bg-surface border border-borderToken rounded p-2" placeholder="Output" value={ex.output} onChange={e=>updateRow(setExamples, idx, 'output', e.target.value)} />
@@ -112,6 +120,7 @@ export default function CreateProblemModal({ onClose, onCreated, problem }: Prop
             <div className="space-y-2">
               {visible.map((tc, idx) => (
                 <div key={idx} className="grid md:grid-cols-2 gap-2">
+                  <input className="bg-surface border border-borderToken rounded p-2 md:col-span-2" placeholder="Title (optional) — e.g. Edge case: empty array" value={tc.title || ''} onChange={e=>updateRow(setVisible, idx, 'title', e.target.value)} />
                   <textarea className="bg-surface border border-borderToken rounded p-2" placeholder="Input" value={tc.input} onChange={e=>updateRow(setVisible, idx, 'input', e.target.value)} />
                   <div className="flex gap-2">
                     <textarea className="flex-1 bg-surface border border-borderToken rounded p-2" placeholder="Output" value={tc.output} onChange={e=>updateRow(setVisible, idx, 'output', e.target.value)} />
