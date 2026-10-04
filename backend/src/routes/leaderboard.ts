@@ -57,7 +57,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
       if (d.language && d.language !== 'n/a') u.languages.add(String(d.language))
       const t = new Date(d.lastUpdated || d.createdAt || 0).getTime()
       if (t > u.lastActive) u.lastActive = t
-      if (d.assessmentId) u.assessments.add(String(d.assessmentId))
+      if (d.assessmentId) u.assessmentIds.add(String(d.assessmentId))
     }
 
     let rows: any[] = Array.from(byUser.values()).map(u => ({
