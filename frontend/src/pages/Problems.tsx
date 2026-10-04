@@ -27,6 +27,7 @@ export default function Problems() {
   const [selectedProblem, setSelectedProblem] = useState<Problem | null>(null)
   const [showDetails, setShowDetails] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; problemId?: string }>({ open: false })
+  const [editing, setEditing] = useState<Problem | null>(null)
 
   useEffect(() => {
     loadProblems()
@@ -145,14 +146,10 @@ export default function Problems() {
                 {user?.role === 'admin' && (
                   <div className="flex gap-1">
                     <button 
-                      onClick={() => {
-                        // Edit not yet implemented — show info via alert for now
-                        alert('Edit problem coming soon — use Delete + Create for now');
-                      }}
-                      className="p-1 text-accentSecondary/40 cursor-not-allowed"
-                      title="Edit coming soon"
-                      aria-label="Edit not yet available"
-                      disabled
+                      onClick={() => setEditing(problem)}
+                      className="p-1 text-accentSecondary hover:text-accentSecondary/70"
+                      title="Edit"
+                      aria-label={`Edit ${problem.title}`}
                     >
                       ✏️
                     </button>
@@ -318,6 +315,16 @@ export default function Problems() {
           onClose={() => setShowCreate(false)}
           onCreated={() => {
             setShowCreate(false)
+            loadProblems()
+          }}
+        />
+      )}
+      {editing && (
+        <CreateProblemModal
+          problem={editing}
+          onClose={() => setEditing(null)}
+          onCreated={() => {
+            setEditing(null)
             loadProblems()
           }}
         />

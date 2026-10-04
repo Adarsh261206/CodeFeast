@@ -90,6 +90,32 @@ router.post('/problems', requireAuth, async (req: AuthRequest, res) => {
   }
 })
 
+router.put('/problems/:id', requireAuth, async (req: AuthRequest, res) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+
+    let oid: any
+    try { oid = new (await import('mongodb')).ObjectId(req.params.id) } catch { return res.status(400).json({ error: 'Invalid id' }) }
+
+    const parsed = problemSchema.parse(req.body)
+    const result = await getDb().collection('problems').updateOne(
+      { _id: oid },
+      { $set: { ...parsed, updatedAt: new Date() } }
+    )
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ error: 'Problem not found' })
+    }
+    res.json({ ok: true })
+  } catch (e: any) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: 'Validation failed', details: e.flatten() })
+    if (e.code === 11000) return res.status(409).json({ error: 'Problem with this title already exists' })
+    console.error('Update problem error:', e?.message)
+    res.status(400).json({ error: e.message || 'Failed to update problem' })
+  }
+})
+
 export default router
 
 

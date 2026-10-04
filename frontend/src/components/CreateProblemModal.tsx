@@ -1,18 +1,31 @@
 import { useState } from 'react'
 import { api } from '../api/client'
 
+type ProblemData = {
+  _id: string
+  title: string
+  statement: string
+  constraints?: string
+  examples?: { input: string; output: string }[]
+  visible_testcases?: { input: string; output: string }[]
+  hidden_testcases?: { input: string; output: string }[]
+}
+
 type Props = {
   onClose: () => void
   onCreated: () => void
+  problem?: ProblemData
 }
 
-export default function CreateProblemModal({ onClose, onCreated }: Props) {
-  const [title, setTitle] = useState('')
-  const [statement, setStatement] = useState('')
-  const [constraints, setConstraints] = useState('')
-  const [examples, setExamples] = useState<{ input: string; output: string }[]>([{ input: '', output: '' }])
-  const [visible, setVisible] = useState<{ input: string; output: string }[]>([{ input: '', output: '' }])
-  const [hidden, setHidden] = useState<{ input: string; output: string }[]>([{ input: '', output: '' }, { input: '', output: '' }])
+const emptyRow = { input: '', output: '' }
+
+export default function CreateProblemModal({ onClose, onCreated, problem }: Props) {
+  const [title, setTitle] = useState(problem?.title || '')
+  const [statement, setStatement] = useState(problem?.statement || '')
+  const [constraints, setConstraints] = useState(problem?.constraints || '')
+  const [examples, setExamples] = useState<{ input: string; output: string }[]>(problem?.examples?.length ? problem.examples : [emptyRow])
+  const [visible, setVisible] = useState<{ input: string; output: string }[]>(problem?.visible_testcases?.length ? problem.visible_testcases : [emptyRow])
+  const [hidden, setHidden] = useState<{ input: string; output: string }[]>(problem?.hidden_testcases?.length ? problem.hidden_testcases : [emptyRow, emptyRow])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -28,19 +41,25 @@ export default function CreateProblemModal({ onClose, onCreated }: Props) {
     if (!title || !statement) { setError('Title and statement are required'); return }
     if (visible.length < 1 || hidden.length < 1) { setError('Add at least 1 visible and 1 hidden testcase'); return }
 
+    const payload = {
+      title,
+      statement,
+      constraints,
+      examples: examples.filter(e => e.input && e.output),
+      visible_testcases: visible.filter(v => v.input && v.output),
+      hidden_testcases: hidden.filter(h => h.input && h.output)
+    }
+
     setLoading(true)
     try {
-      await api.post('/admin/problems', {
-        title,
-        statement,
-        constraints,
-        examples: examples.filter(e => e.input && e.output),
-        visible_testcases: visible.filter(v => v.input && v.output),
-        hidden_testcases: hidden.filter(h => h.input && h.output)
-      })
+      if (problem) {
+        await api.put(`/admin/problems/${problem._id}`, payload)
+      } else {
+        await api.post('/admin/problems', payload)
+      }
       onCreated()
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Failed to create problem')
+      setError(e.response?.data?.error || (problem ? 'Failed to update problem' : 'Failed to create problem'))
     } finally {
       setLoading(false)
     }
@@ -50,7 +69,7 @@ export default function CreateProblemModal({ onClose, onCreated }: Props) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="glass-card w-full max-w-3xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-6 pb-4 border-b border-borderToken">
-          <h2 className="text-xl font-semibold">Create Problem</h2>
+          <h2 className="text-xl font-semibold">{problem ? 'Edit Problem' : 'Create Problem'}</h2>
           <button className="text-textSecondary hover:text-textPrimary" onClick={onClose}>✕</button>
         </div>
         <form id="create-problem-form" onSubmit={onSubmit} className="flex-1 overflow-y-auto p-6 pt-4 space-y-4">
@@ -127,7 +146,7 @@ export default function CreateProblemModal({ onClose, onCreated }: Props) {
         <div className="p-6 pt-4 border-t border-borderToken flex justify-end gap-2">
           <button type="button" onClick={onClose} className="px-3 py-2 rounded-md border border-borderToken">Cancel</button>
           <button form="create-problem-form" type="submit" disabled={loading} className="px-3 py-2 rounded-md bg-accentPrimary/80 hover:bg-accentPrimary disabled:opacity-60">
-            {loading ? 'Creating…' : 'Create Problem'}
+            {loading ? (problem ? 'Saving…' : 'Creating…') : (problem ? 'Save Changes' : 'Create Problem')}
           </button>
         </div>
       </div>

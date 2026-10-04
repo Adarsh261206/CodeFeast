@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
 import CreateAssessmentModal from '@/components/CreateAssessmentModal'
 import EditAssessmentModal from '@/components/EditAssessmentModal'
+import ConfirmModal from '@/components/ConfirmModal'
 
 type Assessment = {
   _id: string
@@ -22,6 +23,7 @@ export default function Assessments() {
   const [allProblems, setAllProblems] = useState<{ _id: string }[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [editing, setEditing] = useState<Assessment | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; id?: string; title?: string }>({ open: false })
   const { user } = useAuth()
   const navigate = useNavigate()
 
@@ -39,6 +41,18 @@ export default function Assessments() {
   }
 
   useEffect(() => { load() }, [])
+
+  const confirmDeleteAssessment = async () => {
+    if (!confirmDelete.id) return
+    try {
+      await api.delete(`/assessments/${confirmDelete.id}`)
+      setConfirmDelete({ open: false })
+      load()
+    } catch (e) {
+      console.error('Failed to delete assessment:', e)
+      setConfirmDelete({ open: false })
+    }
+  }
 
   if (loading) {
     return <div className="glass-card neon-border p-6">Loading assessments…</div>
@@ -69,7 +83,10 @@ export default function Assessments() {
               </div>
               <div className="flex gap-2">
                 {user?.role === 'admin' && (
-                  <button onClick={() => setEditing(a)} className="px-3 py-1 bg-accentPrimary/80 hover:bg-accentPrimary rounded-md text-sm">Edit</button>
+                  <>
+                    <button onClick={() => setEditing(a)} className="px-3 py-1 bg-accentPrimary/80 hover:bg-accentPrimary rounded-md text-sm">Edit</button>
+                    <button onClick={() => setConfirmDelete({ open: true, id: a._id, title: a.title })} className="px-3 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 border border-rose-500/30 rounded-md text-sm">Delete</button>
+                  </>
                 )}
                 <button onClick={() => navigate(`/live-assessment/${a._id}`)} className="px-3 py-1 bg-surface rounded-md text-sm border border-borderToken">Open</button>
               </div>
@@ -85,6 +102,16 @@ export default function Assessments() {
       {editing && (
         <EditAssessmentModal assessment={editing} onClose={() => setEditing(null)} onUpdated={() => { setEditing(null); load() }} />
       )}
+
+      <ConfirmModal
+        open={confirmDelete.open}
+        title="Delete Assessment"
+        message={`Are you sure you want to delete "${confirmDelete.title || ''}"? Submissions and reports for it stay, but the assessment will be removed. This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteAssessment}
+        onCancel={() => setConfirmDelete({ open: false })}
+      />
     </div>
   )
 }
