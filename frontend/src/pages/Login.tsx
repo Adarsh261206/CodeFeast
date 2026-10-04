@@ -18,17 +18,14 @@ export default function Login() {
   const { refresh } = useAuth() as any
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 md:p-10 relative">
-      {/* Background photo (Om Mishra) + dark gradient so the white card stays readable */}
-      <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url(/login-bg.jpg)' }} aria-hidden="true" />
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-900/55 to-slate-950/80" aria-hidden="true" />
-      <div className="relative z-10 w-full max-w-[440px]">
+    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6 md:p-10">
+      <div className="w-full max-w-[440px]">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white text-slate-900 grid place-items-center font-bold text-sm">CF</div>
-            <div className="text-[22px] font-semibold tracking-tight text-white">CodeFeast</div>
+            <div className="w-9 h-9 rounded-xl bg-slate-900 grid place-items-center text-white font-bold text-sm">CF</div>
+            <div className="text-[22px] font-semibold tracking-tight text-slate-900">CodeFeast</div>
           </div>
-          <div className="mt-2 text-sm text-slate-300">Assess. Code. Succeed.</div>
+          <div className="mt-2 text-sm text-slate-500">Assess. Code. Succeed.</div>
         </div>
 
         <form
