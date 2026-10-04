@@ -10,6 +10,7 @@ type Problem = {
   title: string
   statement: string
   constraints?: string
+  marks?: number
   examples?: { input: string; output: string; title?: string }[]
   visible_testcases?: { input: string; output: string; title?: string }[]
   hidden_testcases?: { input: string; output: string }[]
@@ -197,7 +198,7 @@ export default function Problems() {
               )}
 
               <div className="flex items-center justify-between text-xs text-textSecondary">
-                <span>{problem.visible_testcases?.length || 0} test cases</span>
+                <span>{problem.visible_testcases?.length || 0} test cases · {problem.marks ?? 1} marks</span>
                 {problem.createdAt && (
                   <span>{new Date(problem.createdAt).toLocaleDateString()}</span>
                 )}

@@ -87,7 +87,7 @@ function App() {
                   <Route path="/live-assessment/:assessmentId" element={<Protected><LiveAssessment /></Protected>} />
                   <Route path="/problems" element={<Protected adminOnly><Problems /></Protected>} />
                   <Route path="/assessments" element={<Protected><Assessments /></Protected>} />
-                  <Route path="/leaderboard" element={<Protected><Leaderboard /></Protected>} />
+                  <Route path="/leaderboard" element={<Protected adminOnly><Leaderboard /></Protected>} />
                   <Route path="/reports" element={<Protected adminOnly><Reports /></Protected>} />
                 </Routes>
               </motion.div>

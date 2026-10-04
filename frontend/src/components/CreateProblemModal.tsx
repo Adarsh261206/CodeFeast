@@ -6,6 +6,7 @@ type ProblemData = {
   title: string
   statement: string
   constraints?: string
+  marks?: number
   examples?: { input: string; output: string; title?: string }[]
   visible_testcases?: { input: string; output: string; title?: string }[]
   hidden_testcases?: { input: string; output: string }[]
@@ -25,6 +26,7 @@ export default function CreateProblemModal({ onClose, onCreated, problem }: Prop
   const [title, setTitle] = useState(problem?.title || '')
   const [statement, setStatement] = useState(problem?.statement || '')
   const [constraints, setConstraints] = useState(problem?.constraints || '')
+  const [marks, setMarks] = useState(String(problem?.marks ?? 1))
   const [examples, setExamples] = useState<Row[]>(problem?.examples?.length ? problem.examples : [emptyRow])
   const [visible, setVisible] = useState<Row[]>(problem?.visible_testcases?.length ? problem.visible_testcases : [emptyRow])
   const [hidden, setHidden] = useState<{ input: string; output: string }[]>(problem?.hidden_testcases?.length ? problem.hidden_testcases : [emptyRow, emptyRow])
@@ -52,6 +54,7 @@ export default function CreateProblemModal({ onClose, onCreated, problem }: Prop
       title,
       statement,
       constraints,
+      marks: Math.min(1000, Math.max(1, Number(marks) || 1)),
       examples: examples.filter(e => e.input && e.output).map(withTitle),
       visible_testcases: visible.filter(v => v.input && v.output).map(withTitle),
       hidden_testcases: hidden.filter(h => h.input && h.output)
@@ -84,9 +87,16 @@ export default function CreateProblemModal({ onClose, onCreated, problem }: Prop
             <label className="block text-sm text-textSecondary mb-1">Title</label>
             <input className="w-full bg-surface border border-borderToken rounded-md p-2 focus-ring" value={title} onChange={e=>setTitle(e.target.value)} required />
           </div>
-          <div>
-            <label className="block text-sm text-textSecondary mb-1">Statement</label>
-            <textarea className="w-full bg-surface border border-borderToken rounded-md p-2 focus-ring" rows={6} value={statement} onChange={e=>setStatement(e.target.value)} required />
+          <div className="grid md:grid-cols-[1fr_180px] gap-4">
+            <div>
+              <label className="block text-sm text-textSecondary mb-1">Statement</label>
+              <textarea className="w-full bg-surface border border-borderToken rounded-md p-2 focus-ring" rows={6} value={statement} onChange={e=>setStatement(e.target.value)} required />
+            </div>
+            <div>
+              <label className="block text-sm text-textSecondary mb-1">Marks (points for full solve)</label>
+              <input className="w-full bg-surface border border-borderToken rounded-md p-2 focus-ring" type="number" min={1} max={1000} value={marks} onChange={e=>setMarks(e.target.value)} required />
+              <p className="text-xs text-textSecondary mt-1">Leaderboard points = solve% × these marks</p>
+            </div>
           </div>
           <div>
             <label className="block text-sm text-textSecondary mb-1">Constraints</label>

@@ -19,15 +19,30 @@ async function main() {
   }
   console.log('deduped:', latest.size)
 
+  const { ObjectId } = await import('mongodb')
+  const marksByProblem = new Map<string, number>()
+  const oids: any[] = []
+  for (const d of latest.values()) {
+    if (!d.problemId) continue
+    try { oids.push(new ObjectId(String(d.problemId))) } catch {}
+  }
+  if (oids.length) {
+    const probs = await db.collection('problems').find({ _id: { $in: oids } }, { projection: { marks: 1 } }).toArray()
+    for (const p of probs) marksByProblem.set(String(p._id), Number(p.marks) || 1)
+  }
+  console.log('marks loaded:', marksByProblem.size, JSON.stringify([...marksByProblem]))
+
   const byUser = new Map<string, any>()
   for (const d of latest.values()) {
     let u = byUser.get(d.candidateEmail)
     if (!u) {
-      u = { candidateEmail: d.candidateEmail, score: 0, problemsAttempted: 0, problemsPassed: 0, tcPassed: 0, tcTotal: 0, timeSec: 0, languages: new Set<string>(), lastActive: 0, assessmentIds: new Set<string>() }
+      u = { candidateEmail: d.candidateEmail, score: 0, maxMarks: 0, problemsAttempted: 0, problemsPassed: 0, tcPassed: 0, tcTotal: 0, timeSec: 0, languages: new Set<string>(), lastActive: 0, assessmentIds: new Set<string>() }
       byUser.set(d.candidateEmail, u)
     }
     const s = Number(d.score) || 0
-    u.score += s
+    const marks = marksByProblem.get(String(d.problemId || '')) || 1
+    u.score += s * marks
+    u.maxMarks += marks
     u.problemsAttempted += 1
     if (s >= 0.5) u.problemsPassed += 1
     if (Array.isArray(d.results)) {
@@ -43,7 +58,8 @@ async function main() {
 
   let rows: any[] = Array.from(byUser.values()).map(u => ({
     candidateEmail: u.candidateEmail,
-    score: Math.round(u.score * 10000) / 10000,
+    score: Math.round(u.score * 100) / 100,
+    maxMarks: u.maxMarks,
     problemsAttempted: u.problemsAttempted,
     problemsPassed: u.problemsPassed,
     tcPassed: u.tcPassed,

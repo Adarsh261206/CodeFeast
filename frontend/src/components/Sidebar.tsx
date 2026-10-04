@@ -6,8 +6,10 @@ const getItems = (isAdmin: boolean) => [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
   ...(isAdmin ? [{ to: '/problems', label: 'Problems', icon: FileCode2 }] : []),
   { to: '/assessments', label: 'Assessments', icon: ListChecks },
-  { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },
-  ...(isAdmin ? [{ to: '/reports', label: 'Reports', icon: BarChart3 }] : [])
+  ...(isAdmin ? [
+    { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },
+    { to: '/reports', label: 'Reports', icon: BarChart3 }
+  ] : [])
 ]
 
 export default function Sidebar() {

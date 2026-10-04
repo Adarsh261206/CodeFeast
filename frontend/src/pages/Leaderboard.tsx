@@ -8,6 +8,7 @@ type Row = {
   name: string
   rollNumber: string
   score: number
+  maxMarks: number
   problemsAttempted: number
   problemsPassed: number
   tcPassed: number
@@ -88,7 +89,7 @@ export default function Leaderboard() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-[22px] font-semibold tracking-tight text-slate-900">Leaderboard</h1>
-            <p className="text-sm text-slate-500 mt-1">Live standings — points are server-verified; latest attempt per problem counts.</p>
+            <p className="text-sm text-slate-500 mt-1">Live standings — points = solve% × problem marks (admin-defined); latest attempt per problem counts.</p>
           </div>
           <select
             value={assessmentId}
@@ -155,7 +156,7 @@ export default function Leaderboard() {
               <tbody>
                 {rows.map(r => {
                   const isMe = user?.email === r.candidateEmail
-                  const avgPct = r.problemsAttempted > 0 ? Math.round((r.score / r.problemsAttempted) * 100) : 0
+                  const pct = r.maxMarks > 0 ? Math.round((r.score / r.maxMarks) * 100) : 0
                   return (
                     <tr
                       key={r.candidateEmail}
@@ -177,8 +178,9 @@ export default function Leaderboard() {
                         {r.name && <div className="text-xs text-slate-400 truncate">{r.candidateEmail}</div>}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="font-semibold text-slate-900">{r.score.toFixed(2)}</span>
-                        <span className="text-xs text-slate-400 ml-1">({avgPct}%)</span>
+                        <span className="font-semibold text-slate-900">{r.score.toFixed(1)}</span>
+                        <span className="text-xs text-slate-400"> /{r.maxMarks}</span>
+                        <span className="text-xs text-slate-400 ml-1">({pct}%)</span>
                       </td>
                       <td className="px-4 py-3 text-right text-slate-700">{r.problemsPassed}/{r.problemsAttempted}</td>
                       <td className="px-4 py-3 text-right text-slate-700">{r.tcPassed}/{r.tcTotal}</td>
@@ -192,7 +194,7 @@ export default function Leaderboard() {
             </table>
           </div>
           <div className="px-4 py-3 border-t border-slate-100 bg-slate-50/40 text-xs text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
-            <span>Points = sum of per-problem scores (0–1 each).</span>
+            <span>Points = solve% × problem marks (set in Problems → Edit → Marks).</span>
             <span>Tie-break: more test cases → less time.</span>
             <span>Rank changes live as submissions come in.</span>
           </div>

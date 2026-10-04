@@ -1,13 +1,13 @@
 import { Router } from 'express'
+import { ObjectId } from 'mongodb'
 import { getDb } from '../lib/db'
-import { requireAuth, AuthRequest } from '../middleware/auth'
+import { requireAuth, requireAdmin, AuthRequest } from '../middleware/auth'
 
 const router = Router()
 
-// GET /api/leaderboard?assessmentId=<optional>&limit=<optional>
-// Ranked standings per candidate: points = sum of per-problem scores (latest attempt wins).
-// Open to all logged-in participants so they can track their rank.
-router.get('/', requireAuth, async (req: AuthRequest, res) => {
+// GET /api/leaderboard?assessmentId=<optional>&limit=<optional>  (ADMIN ONLY)
+// Ranked standings per candidate: points = Σ (solve% × problem marks), latest attempt wins.
+router.get('/', requireAuth, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const db = getDb()
     const assessmentId = (req.query.assessmentId as string | undefined)?.trim() || null
@@ -25,6 +25,20 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
       latest.set(key, d)
     }
 
+    // Admin-defined marks per problem (default 1) — points = solve% × marks
+    const marksByProblem = new Map<string, number>()
+    try {
+      const oids: ObjectId[] = []
+      for (const d of latest.values()) {
+        if (!d.problemId) continue
+        try { oids.push(new ObjectId(String(d.problemId))) } catch { /* non-ObjectId id → default 1 */ }
+      }
+      if (oids.length) {
+        const probs = await db.collection('problems').find({ _id: { $in: oids } }, { projection: { marks: 1 } }).toArray()
+        for (const p of probs) marksByProblem.set(String(p._id), Number(p.marks) || 1)
+      }
+    } catch { /* marks lookup best-effort → falls back to 1 */ }
+
     // Aggregate per candidate
     const byUser = new Map<string, any>()
     for (const d of latest.values()) {
@@ -33,6 +47,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
         u = {
           candidateEmail: d.candidateEmail,
           score: 0,
+          maxMarks: 0,
           problemsAttempted: 0,
           problemsPassed: 0,
           tcPassed: 0,
@@ -45,7 +60,9 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
         byUser.set(d.candidateEmail, u)
       }
       const s = Number(d.score) || 0
-      u.score += s
+      const marks = marksByProblem.get(String(d.problemId || '')) || 1
+      u.score += s * marks
+      u.maxMarks += marks
       u.problemsAttempted += 1
       if (s >= 0.5) u.problemsPassed += 1
       if (Array.isArray(d.results)) {
@@ -62,7 +79,8 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
 
     let rows: any[] = Array.from(byUser.values()).map(u => ({
       candidateEmail: u.candidateEmail,
-      score: Math.round(u.score * 10000) / 10000,
+      score: Math.round(u.score * 100) / 100,
+      maxMarks: u.maxMarks,
       problemsAttempted: u.problemsAttempted,
       problemsPassed: u.problemsPassed,
       tcPassed: u.tcPassed,
